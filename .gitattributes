@@ -1,0 +1,49 @@
+# Line-ending policy.
+#
+# Matters more than usual here: the firmware is edited on Windows in CubeIDE,
+# the analysis runs under Python and sometimes WSL, and KiCad files are
+# whitespace-sensitive s-expressions where a CRLF/LF flip-flop turns every
+# save into a thousand-line diff and makes real changes impossible to review.
+
+# Normalise text in the repository, check out native on Windows.
+* text=auto
+
+# Sources: always LF in the repository.
+*.c      text eol=lf
+*.h      text eol=lf
+*.s      text eol=lf
+*.S      text eol=lf
+*.ld     text eol=lf
+*.py     text eol=lf
+*.md     text eol=lf
+*.json   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+
+# CubeIDE project metadata is XML and tolerates LF.
+.project   text eol=lf
+.cproject  text eol=lf
+*.ioc      text eol=lf
+
+# KiCad. Leave exactly as the tool writes them -- do not let git rewrite
+# these or diffs become unreadable.
+*.kicad_sch  text eol=lf
+*.kicad_pcb  text eol=lf
+*.kicad_pro  text eol=lf
+*.kicad_sym  text eol=lf
+*.kicad_mod  text eol=lf
+*.kicad_dru  text eol=lf
+
+# Binary: never touch.
+*.bin    binary
+*.elf    binary
+*.hex    binary
+*.png    binary
+*.jpg    binary
+*.pdf    binary
+*.zip    binary
+*.step   binary
+*.stp    binary
+*.wrl    binary

@@ -1,0 +1,194 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "3bdcb847-a5dc-4651-832a-2d4ebe34ce7f")
+	(paper "A4")
+	(title_block
+		(title "Block Diagram")
+		(date "2026-06-28")
+		(rev "2")
+		(company "James Rhodes")
+	)
+	(lib_symbols)
+	(text "Data Processing"
+		(exclude_from_sim no)
+		(at 227.838 62.992 0)
+		(effects
+			(font
+				(size 5.08 5.08)
+			)
+		)
+		(uuid "4a14bb15-bc7e-40c9-89be-16d1a2532bcc")
+	)
+	(text "Connectors & Power\n"
+		(exclude_from_sim no)
+		(at 89.916 147.828 0)
+		(effects
+			(font
+				(size 5.08 5.08)
+			)
+		)
+		(uuid "6f5a1238-3f26-4191-aa9e-655acdbe1538")
+	)
+	(text "Sensors\n"
+		(exclude_from_sim no)
+		(at 88.9 60.706 0)
+		(effects
+			(font
+				(size 5.08 5.08)
+			)
+		)
+		(uuid "eb339334-0ca1-424f-b137-a3b1edf7b936")
+	)
+	(sheet
+		(at 177.8 20.32)
+		(size 99.06 78.74)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 1.27)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "7fcf0f8f-b295-475a-855a-ca34a4005058")
+		(property "Sheetname" "MCU STM32F723"
+			(at 177.8 19.0496 0)
+			(show_name yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.254)
+					(bold yes)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "MCU.kicad_sch"
+			(at 177.8 100.2034 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "GMWM Analysis Board"
+				(path "/3bdcb847-a5dc-4651-832a-2d4ebe34ce7f"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 19.05 107.95)
+		(size 151.13 82.55)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 1.27)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "b6082caf-1a34-49aa-8f18-bb62ae3fab03")
+		(property "Sheetname" "Connectors & Power"
+			(at 19.05 106.6796 0)
+			(show_name yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.254)
+					(bold yes)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "Connectors_PWR.kicad_sch"
+			(at 19.05 191.6434 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "GMWM Analysis Board"
+				(path "/3bdcb847-a5dc-4651-832a-2d4ebe34ce7f"
+					(page "8")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 19.05 20.32)
+		(size 151.13 78.74)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 1.27)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0)
+		)
+		(uuid "c6517b69-945d-4004-99ce-1ba7cde9f3e6")
+		(property "Sheetname" "Sensors"
+			(at 19.05 19.0496 0)
+			(show_name yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(thickness 0.254)
+					(bold yes)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "Sensors.kicad_sch"
+			(at 19.05 100.2034 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "GMWM Analysis Board"
+				(path "/3bdcb847-a5dc-4651-832a-2d4ebe34ce7f"
+					(page "4")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)

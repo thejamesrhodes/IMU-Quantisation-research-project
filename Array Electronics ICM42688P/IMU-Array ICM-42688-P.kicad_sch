@@ -1,0 +1,1590 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "fe9ba00b-15a9-49a1-8770-34f132630f35")
+	(paper "A3")
+	(title_block
+		(title "IMU-Array ICM-42688-P Parent Schematic")
+		(date "2026-05-31")
+		(rev "1")
+		(company "James Rhodes")
+	)
+	(lib_symbols
+		(symbol "PCM_JLCPCB-Manufacturing:Mounting Hole, 3mm, Via Stiched"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "H"
+				(at 2.286 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "PCM_JLCPCB:Hole, 3mm"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Mounting Hole, 3mm, Via Stiched_0_1"
+				(circle
+					(center 0 0)
+					(radius 0.635)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 0 0)
+					(radius 1.27)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "Mounting Hole, 3mm, Via Stiched_1_1"
+				(pin passive line
+					(at -2.54 0 0)
+					(length 2.54)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "power:GND"
+			(power global)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "#PWR"
+				(at 0 -6.35 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "GND"
+				(at 0 -3.81 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "global power"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "GND_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "GND_1_1"
+				(pin power_in line
+					(at 0 0 270)
+					(length 0)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+	)
+	(text "Sensors + Supporting Hardware"
+		(exclude_from_sim no)
+		(at 296.164 32.258 0)
+		(effects
+			(font
+				(size 5.08 5.08)
+			)
+		)
+		(uuid "0bd22520-fcc7-45cf-a8b1-bb836c568d2f")
+	)
+	(text "TODO:\nMAKE IMU CLOCKS SHARED TIMING GPIO TIMER\nIMPROVE ROUTING\nADD INTERBOARD CONNECTORS TO ALLOW ARRAY SCALING TO N=8\nADD I2C CONNECTORS TO ALLOW APPLICATION IN ROCKET POTENTIALLY\nADD HIGH NOISE POSITIVE CONTROL SMPS + NOISE INJECTION POINTS\nADD TEST POINTS\nADD INDICATOR LEDS\nCOMPLETE SILKSCREEN"
+		(exclude_from_sim no)
+		(at 222.504 226.06 0)
+		(effects
+			(font
+				(size 5.08 5.08)
+				(color 18 78 136 1)
+			)
+		)
+		(uuid "674b4107-af49-4fd9-b4d6-0f79b1b2d1fe")
+	)
+	(text "Data Transmission --- Sensors -> PC"
+		(exclude_from_sim no)
+		(at 110.744 33.274 0)
+		(effects
+			(font
+				(size 5.08 5.08)
+			)
+		)
+		(uuid "6b06303e-8fc0-4904-a73f-969e6d0e8353")
+	)
+	(text "Mounting Holes - M3"
+		(exclude_from_sim no)
+		(at 59.69 242.316 0)
+		(effects
+			(font
+				(size 5.08 5.08)
+			)
+		)
+		(uuid "7838671c-841d-4f72-95bd-4d904ef2d7cc")
+	)
+	(junction
+		(at 55.88 259.08)
+		(diameter 0)
+		(color 98 113 255 1)
+		(uuid "4fe06395-2b0a-43cc-80b2-47c433616f37")
+	)
+	(junction
+		(at 55.88 262.89)
+		(diameter 0)
+		(color 98 113 255 1)
+		(uuid "88dbaa60-bd42-4b26-86f6-462b2ccda689")
+	)
+	(junction
+		(at 55.88 266.7)
+		(diameter 0)
+		(color 98 113 255 1)
+		(uuid "b5432836-04aa-4acf-89a5-a2a256b02860")
+	)
+	(wire
+		(pts
+			(xy 55.88 259.08) (xy 55.88 255.27)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "01ad19b5-432b-4681-8ac8-665d2c7cfd80")
+	)
+	(wire
+		(pts
+			(xy 55.88 266.7) (xy 55.88 262.89)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "03211bab-6ce4-4fec-af47-4b5c6e94d9ca")
+	)
+	(wire
+		(pts
+			(xy 182.88 92.71) (xy 222.25 92.71)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1859e57e-a708-434e-ae4e-2c6557bca793")
+	)
+	(wire
+		(pts
+			(xy 182.88 64.77) (xy 222.25 64.77)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "19d52916-895a-4793-9458-0f91182c7380")
+	)
+	(wire
+		(pts
+			(xy 182.88 57.15) (xy 222.25 57.15)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1bd92a90-8ebb-4dbf-94a4-8359d4f48f8d")
+	)
+	(wire
+		(pts
+			(xy 182.88 99.06) (xy 222.25 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "21285ac6-a1a0-468b-901c-e4877a3deaf6")
+	)
+	(wire
+		(pts
+			(xy 182.88 101.6) (xy 222.25 101.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2219bbe2-aa58-4688-b811-cf1b300da552")
+	)
+	(wire
+		(pts
+			(xy 55.88 262.89) (xy 55.88 259.08)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "2502d7a7-85cc-4c2c-b401-754cd15200f1")
+	)
+	(wire
+		(pts
+			(xy 182.88 48.26) (xy 222.25 48.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "26216f2b-b86f-46f7-a2cc-198306adc2ad")
+	)
+	(wire
+		(pts
+			(xy 55.88 259.08) (xy 58.42 259.08)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "3aed366d-2d52-482f-8e9a-4a15097adbe5")
+	)
+	(wire
+		(pts
+			(xy 182.88 87.63) (xy 222.25 87.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "49b4c398-78df-4eb1-b9d6-1a6ea5040f71")
+	)
+	(wire
+		(pts
+			(xy 182.88 90.17) (xy 222.25 90.17)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5a5af787-927b-4e53-b8de-2a58f8fd9911")
+	)
+	(wire
+		(pts
+			(xy 182.88 111.76) (xy 222.25 111.76)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5b13983d-a184-4e15-82ad-5c8321d482f8")
+	)
+	(wire
+		(pts
+			(xy 182.88 85.09) (xy 222.25 85.09)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5ebdc6b0-a482-4128-a627-68b6f73f2c05")
+	)
+	(wire
+		(pts
+			(xy 182.88 62.23) (xy 222.25 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6363cbec-14bc-4aef-9465-49a73c8d8cfd")
+	)
+	(wire
+		(pts
+			(xy 182.88 109.22) (xy 222.25 109.22)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7663724f-0b24-4c61-a23c-a6b0db791c81")
+	)
+	(wire
+		(pts
+			(xy 182.88 73.66) (xy 222.25 73.66)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7701458a-3ec9-4374-90d3-6ee41a2ec64f")
+	)
+	(wire
+		(pts
+			(xy 182.88 116.84) (xy 222.25 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7d8630bc-3360-470c-a8d3-f4a951060317")
+	)
+	(wire
+		(pts
+			(xy 55.88 255.27) (xy 58.42 255.27)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "7f6ed48c-c99d-4ae5-8ace-42d42ade1dc0")
+	)
+	(wire
+		(pts
+			(xy 55.88 262.89) (xy 58.42 262.89)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "92ba3db1-1c6a-44ac-a5dc-818949e52437")
+	)
+	(wire
+		(pts
+			(xy 182.88 71.12) (xy 222.25 71.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "97457900-2adf-4bba-9bb8-aace3c1210b0")
+	)
+	(wire
+		(pts
+			(xy 182.88 43.18) (xy 222.25 43.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a3c2dede-70bd-46e6-86b6-73226a031238")
+	)
+	(wire
+		(pts
+			(xy 182.88 59.69) (xy 222.25 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "aa1423b7-7ed6-41eb-861b-87bcadfc2ae4")
+	)
+	(wire
+		(pts
+			(xy 55.88 269.24) (xy 55.88 266.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "ad7c3387-6652-4b4a-99a1-3529b1731cd8")
+	)
+	(wire
+		(pts
+			(xy 182.88 78.74) (xy 222.25 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "af9c5222-db29-4670-bac6-dbfcf9525869")
+	)
+	(wire
+		(pts
+			(xy 182.88 114.3) (xy 222.25 114.3)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bdcb3d82-7270-42d3-9746-1fe0f9281e3a")
+	)
+	(wire
+		(pts
+			(xy 55.88 266.7) (xy 58.42 266.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 98 113 255 1)
+		)
+		(uuid "c5ef19e8-85e3-41ee-8ae9-36f0f90a3f62")
+	)
+	(wire
+		(pts
+			(xy 182.88 76.2) (xy 222.25 76.2)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d25ea096-8197-42d8-a8cf-91b49880992b")
+	)
+	(wire
+		(pts
+			(xy 182.88 45.72) (xy 222.25 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d6245f61-ac19-4d76-b0b4-f959440ace88")
+	)
+	(wire
+		(pts
+			(xy 182.88 106.68) (xy 222.25 106.68)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f215d666-3138-411d-8480-e0f12c09adbd")
+	)
+	(wire
+		(pts
+			(xy 182.88 50.8) (xy 222.25 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f5048baa-deb3-405b-b0fe-a82b0328d82a")
+	)
+	(wire
+		(pts
+			(xy 182.88 104.14) (xy 222.25 104.14)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fb1cf849-5d6a-413f-8b6d-c534bbb921ed")
+	)
+	(symbol
+		(lib_id "PCM_JLCPCB-Manufacturing:Mounting Hole, 3mm, Via Stiched")
+		(at 60.96 266.7 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "1ff994d7-2d94-499c-a2ec-1dd3bd9e89fe")
+		(property "Reference" "H4"
+			(at 63.5 266.6999 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" ""
+			(at 60.96 266.7 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PCM_JLCPCB:Hole, 3mm"
+			(at 60.96 266.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 266.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 60.96 266.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f1a47e1a-ef7b-4631-820e-6d14ba105a17")
+		)
+		(instances
+			(project "IMU-Array ICM-42688-P"
+				(path "/fe9ba00b-15a9-49a1-8770-34f132630f35"
+					(reference "H4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "PCM_JLCPCB-Manufacturing:Mounting Hole, 3mm, Via Stiched")
+		(at 60.96 262.89 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "857855a4-66ab-4b7e-bf5e-b0c764705ef4")
+		(property "Reference" "H3"
+			(at 63.5 262.8899 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" ""
+			(at 60.96 262.89 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PCM_JLCPCB:Hole, 3mm"
+			(at 60.96 262.89 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 262.89 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 60.96 262.89 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f5732ff0-5a11-45a8-b915-a5f191ad4ecc")
+		)
+		(instances
+			(project "IMU-Array ICM-42688-P"
+				(path "/fe9ba00b-15a9-49a1-8770-34f132630f35"
+					(reference "H3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "PCM_JLCPCB-Manufacturing:Mounting Hole, 3mm, Via Stiched")
+		(at 60.96 255.27 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "a5c2850c-d245-43ef-8149-1a4f85f84037")
+		(property "Reference" "H1"
+			(at 63.5 255.2699 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" ""
+			(at 60.96 255.27 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PCM_JLCPCB:Hole, 3mm"
+			(at 60.96 255.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 255.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 60.96 255.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "9bbe249e-b8cf-42d9-af81-565f9d0cb950")
+		)
+		(instances
+			(project "IMU-Array ICM-42688-P"
+				(path "/fe9ba00b-15a9-49a1-8770-34f132630f35"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 55.88 269.24 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "a724c672-6660-4505-968d-4bd404774cac")
+		(property "Reference" "#PWR019"
+			(at 55.88 275.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 55.88 274.32 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 55.88 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 55.88 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 55.88 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "fde298e9-fba8-4ef3-ae90-841ed413ad81")
+		)
+		(instances
+			(project "IMU-Array ICM-42688-P"
+				(path "/fe9ba00b-15a9-49a1-8770-34f132630f35"
+					(reference "#PWR019")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "PCM_JLCPCB-Manufacturing:Mounting Hole, 3mm, Via Stiched")
+		(at 60.96 259.08 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ef6a0515-53e8-447d-b05b-66a871371d7e")
+		(property "Reference" "H2"
+			(at 63.5 259.0799 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" ""
+			(at 60.96 259.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "PCM_JLCPCB:Hole, 3mm"
+			(at 60.96 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 60.96 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f91f509b-9d6a-4d7b-949f-ae005cc5f0f7")
+		)
+		(instances
+			(project "IMU-Array ICM-42688-P"
+				(path "/fe9ba00b-15a9-49a1-8770-34f132630f35"
+					(reference "H2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(sheet
+		(at 44.45 22.86)
+		(size 138.43 157.48)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 169 228 255 1)
+		)
+		(uuid "24743fcc-48e2-4b48-bda6-6af72a1a3fb4")
+		(property "Sheetname" "Data Transmission"
+			(at 44.45 22.1484 0)
+			(show_name yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "DataTransmission.kicad_sch"
+			(at 44.45 180.9246 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "INT1.1" bidirectional
+			(at 182.88 99.06 0)
+			(uuid "799ee477-338f-4388-822e-2f4c44f71b08")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "INT1.2" bidirectional
+			(at 182.88 101.6 0)
+			(uuid "bad2682a-852b-462b-a05d-ccbbec5cbd7b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "INT2.1" bidirectional
+			(at 182.88 104.14 0)
+			(uuid "a3e67d97-64c0-47ec-923c-6ed77c5fad83")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "INT2.2" bidirectional
+			(at 182.88 106.68 0)
+			(uuid "3eaee664-8f41-42e6-8a4f-b26bcaf5042a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "INT3.1" bidirectional
+			(at 182.88 109.22 0)
+			(uuid "3785ae3d-4475-468f-a601-ae3da6c86a64")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "INT3.2" bidirectional
+			(at 182.88 111.76 0)
+			(uuid "cfba1313-91c6-44be-82f7-86dd83694ab4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "INT4.1" bidirectional
+			(at 182.88 114.3 0)
+			(uuid "29827912-b1d9-4c7f-9a88-d4924e3045a2")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "INT4.2" bidirectional
+			(at 182.88 116.84 0)
+			(uuid "74713fcd-925a-4e75-843a-9c7ef93ffe7b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MISO1" input
+			(at 182.88 57.15 0)
+			(uuid "c08fc04b-0e5b-49ae-93c0-fe461d2a03e7")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MISO2" input
+			(at 182.88 59.69 0)
+			(uuid "275dc24f-c025-4683-9cfc-413dbc1b91f6")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MISO3" input
+			(at 182.88 62.23 0)
+			(uuid "ee2c0888-6392-45a1-8834-322ffb5aa98a")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MISO4" input
+			(at 182.88 64.77 0)
+			(uuid "b4a1b6bd-4c9d-42a1-953a-610bdf732905")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MOSI1" output
+			(at 182.88 71.12 0)
+			(uuid "57e47d88-d190-4624-851c-a22560887b16")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MOSI2" output
+			(at 182.88 73.66 0)
+			(uuid "c1fad0e5-638c-40e8-adc2-29dc909f3747")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MOSI3" output
+			(at 182.88 76.2 0)
+			(uuid "bec3f653-59dc-4e6d-aaf5-25e1a670f2e8")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "MOSI4" output
+			(at 182.88 78.74 0)
+			(uuid "ff7e7940-605f-4207-a319-9ddada59b490")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "SCK1" output
+			(at 182.88 85.09 0)
+			(uuid "8e86b5a9-d1cc-4f8e-96d8-83c59c7f2041")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "SCK2" output
+			(at 182.88 87.63 0)
+			(uuid "4227f660-ee67-41c3-907c-773cd5d7bfae")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "SCK3" output
+			(at 182.88 90.17 0)
+			(uuid "1047f8f6-a8fe-4d77-8a66-803894fdcfcd")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "SCK4" output
+			(at 182.88 92.71 0)
+			(uuid "677703ec-01a5-4b82-9d88-69d03469bb46")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CS1" output
+			(at 182.88 43.18 0)
+			(uuid "1ac73a2f-976d-40d3-bb24-a254dfe24c5d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CS2" output
+			(at 182.88 45.72 0)
+			(uuid "fabe63ff-d1e6-4da8-9ad0-6d11e02f29dc")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CS3" output
+			(at 182.88 48.26 0)
+			(uuid "3b2c6d1f-b8b8-4bd7-b0d0-a2d3803b560f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(pin "CS4" output
+			(at 182.88 50.8 0)
+			(uuid "fee14fdf-f40a-4cd8-aaf1-ea35b9409352")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(instances
+			(project "IMU-Array ICM-42688-P"
+				(path "/fe9ba00b-15a9-49a1-8770-34f132630f35"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 222.25 24.13)
+		(size 149.86 154.94)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 255 205 166 1)
+		)
+		(uuid "a46e4fe6-615a-4dc6-abdd-79848e3b6380")
+		(property "Sheetname" "Data Logging"
+			(at 222.25 23.4184 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "DataLogging.kicad_sch"
+			(at 222.25 179.6546 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(pin "CS1" input
+			(at 222.25 43.18 180)
+			(uuid "b7378bda-e53c-4916-92cf-627dc6e68d00")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "CS2" input
+			(at 222.25 45.72 180)
+			(uuid "d41d295b-0a66-4036-b9d2-94bbb6e3214f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "CS3" input
+			(at 222.25 48.26 180)
+			(uuid "2ec1b584-1f98-4aba-bf89-ef8e360bfdd4")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "CS4" input
+			(at 222.25 50.8 180)
+			(uuid "e538e463-3cb0-4f70-87b6-92fb2066275b")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT1.1" bidirectional
+			(at 222.25 99.06 180)
+			(uuid "680deb6e-2869-4dd4-9705-c92ec1a69543")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT2.1" bidirectional
+			(at 222.25 104.14 180)
+			(uuid "34f34fb9-d663-446a-a10b-281b9cd3dc17")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT2.2" bidirectional
+			(at 222.25 106.68 180)
+			(uuid "d4ee4601-0dc3-4256-8192-5f40098bbcae")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT3.1" bidirectional
+			(at 222.25 109.22 180)
+			(uuid "f91d5c88-cfb1-431a-8a80-5e4cf5e57e61")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT3.2" bidirectional
+			(at 222.25 111.76 180)
+			(uuid "1f45a7db-df43-4b03-bdb5-b390d920ac8d")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT4.1" bidirectional
+			(at 222.25 114.3 180)
+			(uuid "6824950d-e42c-4dfe-87d8-9a553f673c71")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT4.2" bidirectional
+			(at 222.25 116.84 180)
+			(uuid "36ca0665-a107-4cf6-a160-2735953f8f95")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MISO1" output
+			(at 222.25 57.15 180)
+			(uuid "b106d45b-1740-4764-84fc-a6f4c95ed7df")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MISO2" output
+			(at 222.25 59.69 180)
+			(uuid "14f1c653-00da-4cd5-b163-13611d539675")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MISO3" output
+			(at 222.25 62.23 180)
+			(uuid "aeab0a4d-e6ba-4b3a-b099-5ed9154acee5")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MISO4" output
+			(at 222.25 64.77 180)
+			(uuid "20440949-e042-4d8c-8fcc-521fcc8fe4c1")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MOSI1" input
+			(at 222.25 71.12 180)
+			(uuid "d06b46f0-9b79-4cb8-b9b1-dac8445a6c3f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MOSI2" input
+			(at 222.25 73.66 180)
+			(uuid "91177f6c-3c34-4719-8b3f-41fc1598fae7")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MOSI3" input
+			(at 222.25 76.2 180)
+			(uuid "0b098c17-f6b3-4002-b7db-abef8062b21e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "MOSI4" input
+			(at 222.25 78.74 180)
+			(uuid "2f8435d9-52a6-4a63-8b4d-f9546c01b1bf")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SCK1" input
+			(at 222.25 85.09 180)
+			(uuid "e85ea95e-238b-4f84-a98c-badd54824fd9")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SCK2" input
+			(at 222.25 87.63 180)
+			(uuid "82250994-cf39-4e18-b98f-b17cb84ea6f5")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SCK3" input
+			(at 222.25 90.17 180)
+			(uuid "8614b10f-5bc0-4c81-b809-afc7acd14a5e")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "SCK4" input
+			(at 222.25 92.71 180)
+			(uuid "33a947e4-4c0e-403f-bd39-58caaf9037a7")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(pin "INT1.2" bidirectional
+			(at 222.25 101.6 180)
+			(uuid "2015f18e-2d94-40a8-9aec-1f100f5cbbfb")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(instances
+			(project "IMU-Array ICM-42688-P"
+				(path "/fe9ba00b-15a9-49a1-8770-34f132630f35"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)
