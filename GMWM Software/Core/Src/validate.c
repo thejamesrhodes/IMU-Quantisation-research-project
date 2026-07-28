@@ -356,7 +356,7 @@ static void cmd_settle(int argc, char **argv)
   if (argc >= 5) { total_s = (uint32_t)strtol(argv[4], NULL, 10); }
 
   if (icm_odr_code(to_hz) == 0xFFU || icm_odr_code(from_hz) == 0xFFU ||
-      block_s < 2U || block_s > 120U || total_s < block_s || total_s > 7200U)
+      block_s < 2U || block_s > 600U || total_s < block_s || total_s > 43200U)
   {
     console_printf("usage: settle [to_odr] [from_odr] [block_s] [total_s]\r\n"
                    "  default: settle 1000 25 10 900\r\n");

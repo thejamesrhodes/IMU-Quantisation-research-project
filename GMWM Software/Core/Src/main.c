@@ -1733,8 +1733,8 @@ static void cmd_rate(int argc, char **argv)
   uint32_t window = RATE_WINDOW_MS;
   if (argc >= 2) {
     long s = strtol(argv[1], NULL, 10);
-    if (s >= 1 && s <= 3600L) window = (uint32_t)s * 1000UL;
-    else { console_printf("usage: rate [seconds 1..3600] | rate stop\r\n"); return; }
+    if (s >= 1 && s <= 43200L) window = (uint32_t)s * 1000UL;
+    else { console_printf("usage: rate [seconds 1..43200] | rate stop\r\n"); return; }
   }
 
   for (int i = 0; i < 4; i++) g_rate_c0[i] = g_drdy_count[i];

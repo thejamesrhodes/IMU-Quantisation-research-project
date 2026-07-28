@@ -8,6 +8,7 @@
 #include "fwupdate.h"
 #include "sheppard_config.h"
 #include "console.h"
+#include "arena.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -28,12 +29,19 @@ extern USBD_HandleTypeDef hUsbDeviceHS;
  * one operation you cannot retry are not worth the risk.
  * ========================================================================== */
 
-static uint8_t  s_stage[SHEPPARD_FW_STAGE_SIZE] __attribute__((aligned(8)));
+/* The staging buffer is the shared arena, not a private array. 128 KiB here
+   plus 128 KiB for the SD ring would be 256 KiB against a 192 KiB region --
+   they do not both fit and do not both need to exist at once, because you do
+   not flash firmware in the middle of a record. arena.h has the reasoning. */
+static uint8_t *s_stage;
+
+#define FW_STAGE_MAX  ARENA_SIZE
+static const char *const FW_ARENA_OWNER = "fwupdate";
 
 /* The tail-padding loop in fw_task() rounds the image length up to a word
    boundary in place. If the buffer length were not itself a multiple of 4,
    a maximum-size image would pad one byte past the end. */
-typedef char fw_stage_size_check[((SHEPPARD_FW_STAGE_SIZE & 3U) == 0U) ? 1 : -1];
+typedef char fw_stage_size_check[((FW_STAGE_MAX & 3U) == 0U) ? 1 : -1];
 
 typedef enum {
   FW_IDLE = 0,
@@ -255,7 +263,7 @@ static void cmd_fw(int argc, char **argv)
   {
     console_printf("usage: fw <size-bytes> <crc32-hex>\r\n");
     console_printf("       staging buffer is %lu bytes\r\n",
-                   (unsigned long)SHEPPARD_FW_STAGE_SIZE);
+                   (unsigned long)FW_STAGE_MAX);
     return;
   }
 
@@ -274,12 +282,21 @@ static void cmd_fw(int argc, char **argv)
     return;
   }
 
-  if ((size < SHEPPARD_FW_MIN_SIZE) || (size > SHEPPARD_FW_STAGE_SIZE))
+  if ((size < SHEPPARD_FW_MIN_SIZE) || (size > FW_STAGE_MAX))
   {
     console_printf("FWABORT size-out-of-range %lu (min %lu max %lu)\r\n",
                    (unsigned long)size,
                    (unsigned long)SHEPPARD_FW_MIN_SIZE,
-                   (unsigned long)SHEPPARD_FW_STAGE_SIZE);
+                   (unsigned long)FW_STAGE_MAX);
+    return;
+  }
+
+  /* Claim the shared buffer. Fails, with an explanation, if a record is
+     open -- which is the guard that lets fwupdate and storage overlay. */
+  s_stage = arena_claim(FW_ARENA_OWNER);
+  if (s_stage == NULL)
+  {
+    console_printf("FWABORT arena-busy\r\n");
     return;
   }
 
@@ -344,6 +361,7 @@ void fw_task(void)
     case FW_RECEIVING:
       if ((HAL_GetTick() - s_last_rx) > SHEPPARD_FW_RX_TIMEOUT_MS)
       {
+        arena_release(FW_ARENA_OWNER);   /* ownership-checked; safe anywhere */
         s_state = FW_IDLE;
         console_printf("FWABORT timeout after %lu of %lu bytes\r\n",
                        (unsigned long)s_received, (unsigned long)s_expected);
@@ -359,6 +377,7 @@ void fw_task(void)
       uint32_t got = crc32(s_stage, s_expected);
       if (got != s_want_crc)
       {
+        arena_release(FW_ARENA_OWNER);   /* ownership-checked; safe anywhere */
         s_state = FW_IDLE;
         console_printf("FWCRC bad got=%08lX want=%08lX\r\n",
                        (unsigned long)got, (unsigned long)s_want_crc);
@@ -368,6 +387,7 @@ void fw_task(void)
 
       if (!vectors_plausible(s_stage, s_expected, &why))
       {
+        arena_release(FW_ARENA_OWNER);   /* ownership-checked; safe anywhere */
         s_state = FW_IDLE;
         console_printf("FWVEC bad: %s\r\n", why);
         return;
@@ -380,6 +400,7 @@ void fw_task(void)
          needed -- rather than halfway through a mass erase. */
       if (fw_flash_and_reset(NULL, 0U, 1U) != FW_PROBE_MAGIC)
       {
+        arena_release(FW_ARENA_OWNER);   /* ownership-checked; safe anywhere */
         s_state = FW_IDLE;
         console_printf("FWABORT ramfunc-probe-failed\r\n");
         return;
@@ -419,6 +440,7 @@ void fw_task(void)
            return to. Re-enable interrupts, report, and sit still: the console
            may survive long enough to say why, and SWD certainly will. */
         __enable_irq();
+        arena_release(FW_ARENA_OWNER);   /* ownership-checked; safe anywhere */
         s_state = FW_IDLE;
         console_printf("FWFAIL FLASH_SR=%08lX -- reflash over SWD\r\n",
                        (unsigned long)err);
@@ -426,6 +448,7 @@ void fw_task(void)
       break;
 
     default:
+      arena_release(FW_ARENA_OWNER);
       s_state = FW_IDLE;
       break;
   }

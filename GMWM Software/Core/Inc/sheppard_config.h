@@ -27,12 +27,12 @@ extern "C" {
 #define SHEPPARD_FW_NAME            "sheppard"
 #define SHEPPARD_FW_VERSION_MAJOR   0
 #define SHEPPARD_FW_VERSION_MINOR   2
-#define SHEPPARD_FW_VERSION_PATCH   2
-#define SHEPPARD_FW_VERSION_STR     "0.2.2"
+#define SHEPPARD_FW_VERSION_PATCH   3
+#define SHEPPARD_FW_VERSION_STR     "0.2.3"
 
 /* Free-text build tag. Change this when the build differs in any way that
    could touch the data, and log it in every record header. */
-#define SHEPPARD_BUILD_TAG          "Stage B"
+#define SHEPPARD_BUILD_TAG          "Stage-B-overnight-drift"
 
 /* ==========================================================================
  * Flash layout
@@ -153,6 +153,39 @@ extern "C" {
  * ========================================================================== */
 
 #define SHEPPARD_FW_UPDATE              1
+
+/* ==========================================================================
+ * Storage (storage.c)
+ * ========================================================================== */
+
+/* How often the FAT is updated during a record.
+ *
+ * NOT per block. A truncated record is scientifically void anyway -- R2's
+ * thermal gate and the uniform-sampling assumption behind Allan variance both
+ * fail on a partial capture -- so per-block durability buys little, while a
+ * FAT update 40 times a second at ODR 8000 is exactly the operation TN-16
+ * section 6.4 warns produces stalls of tens to hundreds of ms.
+ *
+ * 30 s bounds the DIAGNOSTIC loss: block sequence numbers and timestamps say
+ * when and why an unattended run died. storage_get_stats() times f_sync
+ * separately from f_write so this can be revisited from measurement rather
+ * than argument. */
+#define SHEPPARD_SD_SYNC_MS             30000U
+
+/* FIFO watermark policy, in the absence of an explicit per-record override.
+ *
+ * Derived, not chosen:
+ *   - rule R8 requires the watermark to be changeable 4x at fixed ODR, so it
+ *     must be a per-record field regardless
+ *   - TN-16 section 9.6 rules out per-sample interrupts at ODR 8000
+ *   - the FIFO is 2 KiB, so the cap must leave headroom for service latency
+ *
+ * Target ~100 ms of samples, capped at 1000 B (50 packets). Gives 3 packets
+ * at 25 Hz and 50 at 8 kHz, i.e. 160 IRQ/s at the top rate. The cap is 49% of
+ * the FIFO, leaving 6.4 ms of overflow tolerance at 8 kHz against a ~1 ms
+ * DMA read. */
+#define SHEPPARD_WM_TARGET_MS           100U
+#define SHEPPARD_WM_MAX_BYTES           1000U
 
 /* Staging buffer, in .bss. Must exceed the largest image you will flash.
    If the link fails with "region RAM overflowed", reduce this. The `fw`
