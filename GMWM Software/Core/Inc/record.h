@@ -125,7 +125,7 @@ int record_finalise_header(uint8_t *dst, const record_cfg_t *cfg,
                            uint32_t f_measured_milli,
                            int32_t t_start_mc, int32_t t_end_mc,
                            uint32_t blocks, uint32_t overruns, uint32_t faults,
-                           uint32_t overflows);
+                           uint32_t overflows, uint32_t ring_full);
 
 /** zlib/IEEE CRC-32. Shared so the host reader and the firmware agree. */
 uint32_t record_crc32(const uint8_t *p, uint32_t n);

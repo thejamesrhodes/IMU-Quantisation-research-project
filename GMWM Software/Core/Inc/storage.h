@@ -81,6 +81,17 @@ int  storage_is_open(void);
 /** Non-zero once the card is mounted. Lets a caller mount lazily instead of
     failing with a confusing FR_NOT_ENABLED. */
 int  storage_is_mounted(void);
+
+/**
+  * @brief  Die temperature of the most recent block, in milli-degC.
+  *
+  *         Taken from the block header, which already carries the first
+  *         packet's temperature field, so the R2 thermal gate can be checked
+  *         continuously during a record without issuing an SPI transaction.
+  *         Polling the sensor instead would add bus activity inside the very
+  *         measurement the gate protects (rule R8).
+  */
+int32_t storage_last_temp_mc(void);
 void storage_get_stats(storage_stats_t *out);
 const char *storage_filename(void);
 

@@ -242,6 +242,27 @@ class Stats:
         self.code_span = int(codes.max() - codes.min()) if codes.size else 0
         self.codes, self.counts = codes, counts
 
+        # Outlier diagnostics.
+        #
+        # A Gaussian record of this length should not reach beyond about 5
+        # sigma: at N = 6e5, P(|z| > 5) predicts 0.36 samples.  So if the code
+        # count implies a span of tens of LSB while sigma is near 1 LSB, the
+        # record contains transients -- a knock, a footfall, a door -- and not
+        # merely wide noise.  That distinction decides whether a record is
+        # usable, and it cannot be seen in sigma alone because a handful of
+        # large samples barely move it.
+        #
+        # The MAD-based scale is the discriminant: it ignores the tails, so
+        # sigma/sigma_robust >> 1 means the tails are doing the work.
+        med = float(np.median(xd))
+        mad = float(np.median(np.abs(xd - med)))
+        self.sigma_robust = 1.4826 * mad
+        self.tail_ratio = (self.sigma / self.sigma_robust
+                           if self.sigma_robust > 0 else float("nan"))
+        z = np.abs(xd - med) / max(self.sigma_robust, 1e-12)
+        self.n_over_6 = int(np.count_nonzero(z > 6.0))
+        self.z_max = float(z.max()) if z.size else 0.0
+
     @property
     def sigma_dps(self) -> float:
         return self.sigma * DELTA_DPS
@@ -370,6 +391,26 @@ def load(path: str):
     return rec, fs, x, q
 
 
+def channels(rec):
+    """All six mechanical channels, for cross-referencing a suspected line.
+
+    The accelerometer is the bench-motion witness (TN-14 section 4.1) and costs
+    nothing: FIFO_HIRES_EN forces a 20-byte packet whether accel is enabled or
+    not, so it is already in every record. A real vibration must appear in the
+    accel channels; an electrical artefact or an in-die spur need not. That is
+    the cheapest available test of whether a line is coming through the mount.
+
+    Gyro channels are returned in units of Delta, accel in raw fine codes --
+    only the frequencies and the presence pattern matter here, not the scaling.
+    """
+    out = {}
+    for i, ax in enumerate(AXES):
+        out[f"gyro {ax}"] = rec.gyro20[:, i].astype(np.float64) / FINE_PER_LSB
+    for i, ax in enumerate(AXES):
+        out[f"accel {ax}"] = rec.accel20[:, i].astype(np.float64)
+    return out
+
+
 def _banner(rec, fs, path):
     cfg = rec.header.get("config") or {}
     fw = rec.header.get("fw") or {}
@@ -380,6 +421,10 @@ def _banner(rec, fs, path):
     print(f"  AAF {cfg.get('aaf')}, UI_FILT_BW {cfg.get('ui_filt_bw')}, "
           f"FSR {cfg.get('fsr_dps')} dps, watermark "
           f"{cfg.get('fifo_watermark_bytes')} B")
+    pw = rec.header.get("power") or {}
+    sen = rec.header.get("sensor") or {}
+    print(f"  slot {sen.get('slot')}, SPI {sen.get('spi_hz', '?')} Hz, "
+          f"battery {pw.get('battery')}, USB {pw.get('usb_connected')}")
     if not rec.verify.ok:
         print(f"  !! {len(rec.verify.problems)} verification problem(s) -- "
               f"this record is not admissible")
@@ -420,6 +465,20 @@ def cmd_stats(args) -> int:
               f"   (diff/detrended {s.sigma_diff / s.sigma:.3f})")
     print("   diff/detrended below 1 means the noise is correlated sample to"
           " sample, i.e. the AAF is shaping it -- expected, not a fault.")
+
+    print()
+    print("  tails and transients")
+    for i, ax in enumerate(AXES):
+        s = Stats(x[:, i], q[:, i], fs)
+        flag = ""
+        if s.tail_ratio > 1.15 or s.z_max > 8.0:
+            flag = "   <-- transients, inspect the time series"
+        print(f"   {ax}   sigma/sigma_robust {s.tail_ratio:5.3f}   "
+              f"codes {s.n_codes:4d} spanning {s.code_span:4d} D   "
+              f"max |z| {s.z_max:6.2f}   samples >6 sigma {s.n_over_6:6d}{flag}")
+    print("   A clean Gaussian record of this length should not exceed about")
+    print("   5 sigma. A code span far wider than ~10x sigma means the record")
+    print("   contains knocks or footfalls, not merely wide noise.")
     return 0
 
 
@@ -457,6 +516,20 @@ def cmd_screen(args) -> int:
         print()
         print(f"  largest line is {worst:.5f} Delta "
               f"({100.0 * worst / max(s.sigma, 1e-12):.2f}% of sigma)")
+
+        # Coherent lines are variance, so they inflate sigma and therefore
+        # rho -- and rho is the campaign's independent variable.  A sinusoid of
+        # amplitude A carries A^2/2 of power, so subtracting the detected lines
+        # gives the sigma the sensor would show on a quiet bench.  This is a
+        # diagnostic, NOT a licence to analyse contaminated records: rule R4
+        # switches the prediction chain, it does not permit subtraction.
+        line_var = sum(L.amp_lsb ** 2 / 2.0 for L in lines)
+        clean_var = max(s.sigma ** 2 - line_var, 0.0)
+        rho_clean = math.sqrt(clean_var)
+        print(f"  line power {line_var:.4f} Delta^2 of "
+              f"{s.sigma ** 2:.4f} total ({100.0 * line_var / s.sigma ** 2:.1f}%)")
+        print(f"  rho would be {rho_clean:.4f} on a bench without these lines "
+              f"(measured {s.rho:.4f})")
         if worst < 0.01:
             print("  R4: PASS (marginal) -- lines present but all below 0.01"
                   " Delta.")
@@ -468,6 +541,148 @@ def cmd_screen(args) -> int:
 
     if args.fig:
         _fig_screen(res, s, rec, fs, args.axis.upper(), args.fig, args.file)
+    return 0
+
+
+def cmd_trace(args) -> int:
+    """Screen all six channels and cross-tabulate the lines found.
+
+    The question a single-channel screen cannot answer is WHERE a line comes
+    from. This one can, because the answer is written in the presence pattern:
+
+      - in all three accel axes and all three gyro axes -> the mount is moving;
+        the source is mechanical and external, and isolation will fix it
+      - in the gyro axes but NOT in accel -> not bench motion. Either genuine
+        rotation (rare at a fixed frequency) or something inside the part or
+        its supply, in which case moving the board will not help
+      - in ONE channel only -> not a physical rotation or translation at all;
+        treat as an electrical or in-die artefact of that channel
+
+    Amplitudes across channels are not comparable (gyro is in Delta, accel in
+    fine codes), so the table reports the ratio to each channel's own local
+    noise floor, which is dimensionless and directly says how far the line
+    stands out where it appears.
+    """
+    rec, fs, x, q = load(args.file)
+    _banner(rec, fs, args.file)
+
+    chans = channels(rec)
+    found = {}
+    for name, sig in chans.items():
+        if float(np.std(sig)) < 1e-9:
+            print(f"  {name}: constant -- channel disabled, skipping")
+            continue
+        res = screen_lines(sig, fs, alpha=args.alpha)
+        found[name] = res
+
+    # Cluster line frequencies across channels. One bin of tolerance is not
+    # enough: the peak can sit either side of the true frequency in different
+    # channels, so allow a few bins.
+    tol = max(fs / 65536.0 * 4.0, 0.5)
+    clusters = []
+    for name, res in found.items():
+        for L in res["lines"]:
+            for c in clusters:
+                if abs(c["f"] - L.f) <= tol:
+                    c["hits"][name] = L
+                    c["f"] = float(np.mean([c["f"], L.f]))
+                    break
+            else:
+                clusters.append(dict(f=L.f, hits={name: L}))
+    clusters.sort(key=lambda c: -max(h.ratio for h in c["hits"].values()))
+
+    names = list(found.keys())
+    print()
+    print("  line presence across channels (ratio to that channel's floor)")
+    print("     frequency  " + "".join(f"{n:>11}" for n in names))
+    for c in clusters:
+        row = f"  {c['f']:10.3f} Hz"
+        for n in names:
+            L = c["hits"].get(n)
+            row += f"{L.ratio:11.0f}" if L else f"{'-':>11}"
+        print(row)
+
+    print()
+    for c in clusters[:6]:
+        g = sum(1 for n in c["hits"] if n.startswith("gyro"))
+        a = sum(1 for n in c["hits"] if n.startswith("accel"))
+        if a >= 2 and g >= 2:
+            verdict = ("in BOTH sensors -- either the mount is moving, or it "
+                       "is a shared-clock spur. Run `compare` to settle it.")
+        elif a >= 2 and g <= 1:
+            verdict = ("MECHANICAL translation -- accel sees it, gyro barely "
+                       "does. Isolation will fix it.")
+        elif a == 0 and g >= 2:
+            verdict = ("gyro only -- not translation. Either rotational "
+                       "vibration about a point near the accel, or electrical.")
+        elif a == 0 and g == 1:
+            verdict = ("single gyro channel -- not a physical rotation; "
+                       "treat as electrical or in-die.")
+        else:
+            verdict = "mixed; needs a longer record to decide."
+        print(f"  {c['f']:9.3f} Hz  gyro {g}/3, accel {a}/3  ->  {verdict}")
+
+    print()
+    print("  NOTE: presence in the accelerometer does NOT by itself prove")
+    print("  mechanical origin. Accel and gyro are sampled by the same")
+    print("  internal clock, so a spur in that clock domain appears in both.")
+    print("  The decisive test is `compare` against a record from the other")
+    print("  specimen: the two parts have independent RC oscillators, so an")
+    print("  internal spur scales with the sample-rate ratio and an external")
+    print("  one does not.")
+    return 0
+
+
+def cmd_compare(args) -> int:
+    """Decide internal vs external origin using two specimens.
+
+    Each ICM runs from its own RC oscillator, and the two differ by a few
+    tenths of a percent. Anything generated inside the part -- a clock spur, a
+    charge-pump artefact, a drive-loop beat -- is therefore at a frequency
+    PROPORTIONAL to that part's sample rate, while anything arriving from
+    outside sits at the same absolute frequency in both records.
+
+    So for each line, compare
+
+        f2 / f1     against     fs2 / fs1
+
+    Agreement to within a bin means internal; equality of f2 and f1 instead
+    means external. This is a far stronger test than the accelerometer
+    cross-check, because it does not depend on how the disturbance couples.
+    """
+    ra, fsa, xa, _ = load(args.file_a)
+    rb, fsb, xb, _ = load(args.file_b)
+
+    ax = {"X": 0, "Y": 1, "Z": 2}[args.axis.upper()]
+    res_a = screen_lines(xa[:, ax], fsa, alpha=args.alpha)
+    res_b = screen_lines(xb[:, ax], fsb, alpha=args.alpha)
+
+    ratio = fsb / fsa
+    bin_a = fsa / 65536.0
+    print(f"  A: {os.path.basename(args.file_a)}   fs {fsa:.3f} Hz")
+    print(f"  B: {os.path.basename(args.file_b)}   fs {fsb:.3f} Hz")
+    print(f"  sample-rate ratio fsB/fsA = {ratio:.6f} "
+          f"({100.0 * (ratio - 1.0):+.4f}%)")
+    print()
+    print("     f_A (Hz)    f_B (Hz)   fB/fA      expected if internal  verdict")
+
+    for La in res_a["lines"]:
+        f_int = La.f * ratio                    # where it would sit if internal
+        f_ext = La.f                            # where it would sit if external
+        best, kind = None, ""
+        for Lb in res_b["lines"]:
+            if abs(Lb.f - f_int) <= max(3 * bin_a, 0.5):
+                best, kind = Lb, "INTERNAL to the part (scales with its clock)"
+                break
+            if abs(Lb.f - f_ext) <= max(3 * bin_a, 0.5):
+                best, kind = Lb, "EXTERNAL (same absolute frequency)"
+                break
+        if best is None:
+            print(f"  {La.f:10.3f}         --         --                 "
+                  f"{f_int:10.3f}   absent from B")
+        else:
+            print(f"  {La.f:10.3f} {best.f:11.3f} {best.f / La.f:9.6f}  "
+                  f"{f_int:18.3f}   {kind}")
     return 0
 
 
@@ -663,6 +878,19 @@ def main(argv=None) -> int:
     p = sub.add_parser("stats", help="mu, phi, sigma, rho, eta per axis")
     p.add_argument("file")
     p.set_defaults(func=cmd_stats)
+
+    p = sub.add_parser("trace", help="locate a line: screen all six channels")
+    p.add_argument("file")
+    p.add_argument("--alpha", type=float, default=0.01)
+    p.set_defaults(func=cmd_trace)
+
+    p = sub.add_parser("compare",
+                       help="internal vs external, using two specimens")
+    p.add_argument("file_a")
+    p.add_argument("file_b")
+    p.add_argument("--axis", default="X", choices=list("XYZxyz"))
+    p.add_argument("--alpha", type=float, default=0.01)
+    p.set_defaults(func=cmd_compare)
 
     p = sub.add_parser("allan", help="overlapping Allan deviation")
     p.add_argument("file")

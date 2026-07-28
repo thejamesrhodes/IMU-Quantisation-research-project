@@ -132,7 +132,7 @@ static int build(uint8_t *dst, const record_cfg_t *c, const char *run_id,
                  uint64_t ts_first, uint64_t ts_last,
                  uint32_t f_milli, int32_t t0_mc, int32_t t1_mc,
                  uint32_t blocks, uint32_t overruns, uint32_t faults,
-                 uint32_t overflows)
+                 uint32_t overflows, uint32_t ring_full)
 {
   readback_t rb;
   read_all(c->slot, &rb);
@@ -215,14 +215,14 @@ static int build(uint8_t *dst, const record_cfg_t *c, const char *run_id,
         "\"f_measured_mhz\":%lu,\"f_measure_method\":\"tim2_vs_sample_count\"},\n"
       "\"thermal\":{\"t_start_mc\":%ld,\"t_end_mc\":%ld,\"drift_mk\":%ld},\n"
       "\"integrity\":{\"blocks\":%lu,\"bus_overruns\":%lu,\"bus_faults\":%lu,"
-        "\"fifo_overflows\":%lu,\"closed\":true}\n}\n",
+        "\"fifo_overflows\":%lu,\"ring_full\":%lu,\"closed\":true}\n}\n",
       (unsigned long)n_samples, (unsigned long)n_gaps,
       u64dec(ts_first, tsbuf_a, sizeof tsbuf_a),
       u64dec(ts_last,  tsbuf_b, sizeof tsbuf_b),
       (unsigned long)f_milli, (long)t0_mc, (long)t1_mc,
       (long)(t1_mc - t0_mc),
       (unsigned long)blocks, (unsigned long)overruns, (unsigned long)faults,
-      (unsigned long)overflows);
+      (unsigned long)overflows, (unsigned long)ring_full);
   }
   else
   {
@@ -232,7 +232,7 @@ static int build(uint8_t *dst, const record_cfg_t *c, const char *run_id,
         "\"f_measured_mhz\":null,\"f_measure_method\":\"tim2_vs_sample_count\"},\n"
       "\"thermal\":{\"t_start_mc\":null,\"t_end_mc\":null,\"drift_mk\":null},\n"
       "\"integrity\":{\"blocks\":null,\"bus_overruns\":null,\"bus_faults\":null,"
-        "\"fifo_overflows\":null,\"closed\":false}\n}\n");
+        "\"fifo_overflows\":null,\"ring_full\":null,\"closed\":false}\n}\n");
   }
 
   if (n < 0 || n >= cap)
@@ -251,7 +251,7 @@ static int build(uint8_t *dst, const record_cfg_t *c, const char *run_id,
 int record_build_header(uint8_t *dst, const record_cfg_t *cfg,
                         const char *run_id)
 {
-  return build(dst, cfg, run_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  return build(dst, cfg, run_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 
 int record_finalise_header(uint8_t *dst, const record_cfg_t *cfg,
@@ -261,9 +261,9 @@ int record_finalise_header(uint8_t *dst, const record_cfg_t *cfg,
                            uint32_t f_measured_milli,
                            int32_t t_start_mc, int32_t t_end_mc,
                            uint32_t blocks, uint32_t overruns, uint32_t faults,
-                           uint32_t overflows)
+                           uint32_t overflows, uint32_t ring_full)
 {
   return build(dst, cfg, run_id, 1, n_samples, n_gaps, ts_first_us,
                ts_last_us, f_measured_milli, t_start_mc, t_end_mc,
-               blocks, overruns, faults, overflows);
+               blocks, overruns, faults, overflows, ring_full);
 }

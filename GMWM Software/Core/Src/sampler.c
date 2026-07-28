@@ -56,6 +56,30 @@ static volatile uint16_t  s_step_len;
 static volatile uint64_t  s_chain_start_us;  /* liveness timeout reference  */
 static volatile uint8_t   s_retries;         /* consecutive chain retries   */
 
+/* A watermark pulse that arrived while a chain was already running.
+ *
+ * THE RACE THIS EXISTS TO CLOSE
+ *   The chain ends with a count read that finds the FIFO below the watermark.
+ *   That read takes about 20 us. If the level crosses the watermark during it,
+ *   sampler_on_int() sees s_chain still set and returns without starting
+ *   anything -- and because INT1 is PULSED, that crossing was the only
+ *   notification there will ever be. The stream is then dead until the
+ *   watchdog notices.
+ *
+ *   Measured on 28 July at ODR 8000: 170 events in 300 s, against a predicted
+ *   160 drains/s x 20 us / 6250 us = 0.51/s. Each one cost a full FIFO --
+ *   25920 samples lost from a 5-minute record that reported no drops, because
+ *   nothing in the drop accounting can see a sample the FIFO overwrote.
+ *
+ *   Making the watchdog fast enough to catch it (v0.2.9 used 6.4 ms against a
+ *   12.8 ms fill time) hides the symptom at the cost of thousands of
+ *   unscheduled bus transactions whose rate varies with load -- exactly what
+ *   rule R8 exists to prevent. Recording the missed pulse instead removes the
+ *   race, and lets the watchdog stay relaxed.
+ */
+static volatile uint8_t   s_int_missed;
+static volatile uint64_t  s_int_missed_us;
+
 #define SAMPLER_MAX_RETRIES 3U
 
 /* The ICM FIFO is 2048 bytes; in 20-byte packet mode it holds 102 packets, so
@@ -233,7 +257,25 @@ static void on_count(bus_slot_t slot, int status, void *ctx)
      arrive, so a pulse IS coming and the chain can stop here. At or above it,
      no transition occurs and no pulse will come, so the chain must continue or
      the stream latches. This test is the one that keeps the drain alive. */
-  if (s_avail < s_wm) { s_retries = 0U; s_chain = 0U; return; }
+  if (s_avail < s_wm)
+  {
+    s_retries = 0U;
+
+    /* ...unless the pulse we are counting on has ALREADY been and gone while
+       this chain was running. Then there is nothing left to wait for, and
+       stopping here strands the stream until the watchdog. Go round instead. */
+    if (s_int_missed)
+    {
+      s_int_missed = 0U;
+      s_st.recovered++;
+      s_t_pending = s_int_missed_us;
+      pend_step(STEP_COUNT);
+      return;
+    }
+
+    s_chain = 0U;
+    return;
+  }
 
   uint32_t pkts = s_avail / ICM_PACKET4_LEN;
   if (pkts == 0U) { s_retries = 0U; s_chain = 0U; return; }
@@ -323,9 +365,18 @@ void sampler_on_int(uint16_t gpio_pin)
   s_last_int_us = t;
 
   /* A chain already running will drain whatever this interrupt was about, so
-     stacking another would only fight it for the bus. */
-  if (s_chain) { return; }
+     stacking another would only fight it for the bus -- but the pulse must be
+     REMEMBERED, not discarded. INT1 is pulsed, so this crossing is the only
+     notification that will ever be issued, and a chain that is about to
+     terminate would otherwise strand the stream. See s_int_missed above. */
+  if (s_chain)
+  {
+    s_int_missed    = 1U;
+    s_int_missed_us = t;
+    return;
+  }
 
+  s_int_missed = 0U;
   s_chain = 1U;
   start_count_read(t);
 }
@@ -437,6 +488,7 @@ int sampler_start(bus_slot_t slot, uint16_t watermark_bytes, long odr_hz)
   s_chain          = 0U;
   s_step           = STEP_NONE;
   s_retries        = 0U;
+  s_int_missed     = 0U;
   s_last_int_us    = timebase_now_us();
   s_chain_start_us = s_last_int_us;
 

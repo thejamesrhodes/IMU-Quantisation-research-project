@@ -11,6 +11,7 @@
 #include "console.h"
 #include "timebase.h"
 #include "sampler.h"
+#include "led.h"
 #include "sheppard_config.h"
 
 #include <stdio.h>
@@ -50,6 +51,7 @@ static uint32_t s_last_sync_ms;
 static uint64_t s_ts_first;
 static uint64_t s_ts_last;      /* trigger instant of the most recent read  */
 static uint32_t s_first_pkts;   /* packets delivered by the FIRST read      */
+static volatile int16_t s_last_temp_raw;   /* newest block's die temperature */
 static storage_stats_t s_st;
 
 /* One header scratch, shared by open and close. They were separate 4 KiB
@@ -153,6 +155,7 @@ void storage_advance(uint16_t bytes, uint64_t t_us, uint16_t fifo_bytes,
        in the block header so a reader can check it without decoding. */
     const uint8_t *p0 = b + SDAT_BLKHDR_BYTES;
     h->temp_raw = (uint16_t)(((uint16_t)p0[0x0D] << 8) | p0[0x0E]);
+    s_last_temp_raw = (int16_t)h->temp_raw;
   }
 
   h->flags     |= flags;
@@ -168,6 +171,16 @@ void storage_advance(uint16_t bytes, uint64_t t_us, uint16_t fifo_bytes,
 }
 
 uint32_t storage_sample_count(void) { return s_samples; }
+
+int32_t storage_last_temp_mc(void)
+{
+  /* Packet 4 carries the 16-bit temperature field, so the register scaling
+     applies: 132.48 LSB/degC with a 25 degC offset (DS-000347 section 14.9).
+     Read out of the most recent block header, so the R2 gate can be evaluated
+     during a record without an SPI transaction -- which would itself be bus
+     activity inside the measurement it is meant to protect (rule R8). */
+  return (int32_t)(((int32_t)s_last_temp_raw * 1000L) / 132L) + 25000L;
+}
 
 /* ==========================================================================
  * Consumer -- main loop
@@ -379,7 +392,8 @@ int storage_close(uint32_t n_gaps, uint64_t ts_first_us, uint64_t ts_last_us,
                              s_ts_first, s_ts_last, f_milli,
                              t_start_mc, t_end_mc,
                              s_st.blocks_written, sst.bus_busy,
-                             sst.faults + sst.start_err, sst.overflows) >= 0)
+                             sst.faults + sst.start_err, sst.overflows,
+                             sst.ring_full) >= 0)
   {
     if (f_lseek(&s_fil, 0) == FR_OK)
     {
@@ -440,16 +454,26 @@ static void cmd_mount(int argc, char **argv)
                  arena_owner() ? arena_owner() : "free");
 }
 
-/* rec <label> <seconds> [odr] [slot]
+/* rec <label> <seconds> [odr] [slot] [aaf] [delay_s]
  *
  * Blocks for the duration, calling storage_task() so blocks reach the card.
  * Nothing else needs the main loop during a record, and the sampler runs in
- * interrupt context regardless -- which is the whole point of the design. */
+ * interrupt context regardless -- which is the whole point of the design.
+ *
+ * aaf      "def" = 585 Hz (reset value), "floor" = 42 Hz. A SCIENCE PARAMETER:
+ *          the AAF sets the noise bandwidth and therefore sigma, and sigma is
+ *          the campaign's independent variable. Recorded in every header.
+ * delay_s  arm, then wait before sampling starts. For disturbing the bench on
+ *          purpose -- unplugging USB, closing the enclosure -- and letting it
+ *          settle. TN-19 section 4 measured ~9 min for a physical disturbance
+ *          to decay, so the countdown is announced and then the console goes
+ *          quiet, which also removes CDC traffic from the record. */
 static void cmd_rec(int argc, char **argv)
 {
   if (argc < 3)
   {
-    console_printf("usage: rec <label> <seconds> [odr] [slot]\r\n");
+    console_printf("usage: rec <label> <seconds> [odr] [slot] "
+                   "[def|floor] [delay_s]\r\n");
     return;
   }
 
@@ -458,16 +482,50 @@ static void cmd_rec(int argc, char **argv)
   long hz   = (argc >= 4) ? strtol(argv[3], NULL, 10) : 100;
   long sl   = (argc >= 5) ? strtol(argv[4], NULL, 10) : 1;
 
+  uint8_t aaf_floor = 0U;
+  if (argc >= 6)
+  {
+    if      (strcmp(argv[5], "floor") == 0) { aaf_floor = 1U; }
+    else if (strcmp(argv[5], "def")   == 0) { aaf_floor = 0U; }
+    else
+    {
+      console_printf("rec: aaf must be 'def' (585 Hz) or 'floor' (42 Hz)\r\n");
+      return;
+    }
+  }
+  long delay_s = (argc >= 7) ? strtol(argv[6], NULL, 10) : 0;
+  if (delay_s < 0 || delay_s > 3600L) { delay_s = 0; }
+
   if (secs < 1 || secs > 43200L || sl < 1 || sl > 4 ||
       icm_odr_code(hz) == 0xFFU)
   {
     console_printf("usage: rec <label> <1..43200 s> "
-                   "[25|50|100|200|500|1000|8000] [1..4]\r\n");
+                   "[25|50|100|200|500|1000|8000] [1..4] "
+                   "[def|floor] [0..3600]\r\n");
     return;
   }
 
   bus_slot_t slot = (bus_slot_t)(sl - 1);
   if (icm_probe(slot) != 0) { return; }
+
+  if (delay_s > 0)
+  {
+    console_printf("rec: armed, sampling starts in %ld s -- "
+                   "disturb the bench NOW\r\n", delay_s);
+    uint64_t t_arm = timebase_now_us();
+    long announced = delay_s;
+    while ((timebase_now_us() - t_arm) < (uint64_t)delay_s * 1000000ULL)
+    {
+      long left = delay_s - (long)((timebase_now_us() - t_arm) / 1000000ULL);
+      if ((left != announced) && ((left % 30) == 0) && (left > 0))
+      {
+        announced = left;
+        console_printf("rec: %ld s\r\n", left);
+      }
+      led_task();
+    }
+    console_printf("rec: starting\r\n");
+  }
 
   /* Thermal gate per ODR, TN-14 section 2.2 verbatim. Inactive at ODR >= 500
      because eta is phase-flat there. */
@@ -486,7 +544,7 @@ static void cmd_rec(int argc, char **argv)
     .odr_code   = icm_odr_code(hz),
     .fs_sel     = 0U,
     .ui_filt_bw = 0U,
-    .aaf        = ICM_AAF_DEFAULT,
+    .aaf        = aaf_floor ? ICM_AAF_FLOOR : ICM_AAF_DEFAULT,
     .hires      = 1U,
     .watermark  = sampler_watermark_for(hz),
   };
@@ -514,7 +572,7 @@ static void cmd_rec(int argc, char **argv)
 
   record_cfg_t rcfg = {
     .label = label, .slot = slot, .odr_hz = hz, .fsr_dps = 2000,
-    .ui_filt_bw = 0U, .aaf_floor = 0U, .tmst_res_us = tmst_res,
+    .ui_filt_bw = 0U, .aaf_floor = aaf_floor, .tmst_res_us = tmst_res,
     .watermark = icfg.watermark, .offset_user = 0,
     .gate_mk = gate, .on_battery = 0U,
     .usb_connected = (uint8_t)(console_cdc_ready() ? 1 : 0),
@@ -530,23 +588,59 @@ static void cmd_rec(int argc, char **argv)
     return;
   }
 
-  console_printf("rec: %ld s at %ld Hz, watermark %u B, gate %lu mK\r\n",
-                 secs, hz, icfg.watermark, (unsigned long)gate);
+  console_printf("rec: %ld s at %ld Hz, watermark %u B, gate %lu mK, "
+                 "AAF %s\r\n",
+                 secs, hz, icfg.watermark, (unsigned long)gate,
+                 aaf_floor ? "42Hz floor" : "585Hz default");
+
+  led_clear_faults();
+  led_set_mode(LED_MODE_REC);
+  led_thermal(gate != 0U, 1);
 
   uint64_t t0 = timebase_now_us();
   uint64_t end = t0 + (uint64_t)secs * 1000000ULL;
   uint32_t next_report = 10;
 
+  int32_t t_span_lo = INT32_MAX, t_span_hi = INT32_MIN;
+  uint8_t gate_broken = 0U;
+
   while (timebase_now_us() < end)
   {
     if (storage_task() < 0) { break; }
     sampler_poll();                 /* revive a latched pulsed interrupt */
+    led_task();
 
     uint32_t el = (uint32_t)((timebase_now_us() - t0) / 1000000ULL);
     if (el >= next_report)
     {
       next_report = el + 10U;
       sampler_stats_t ss; sampler_get_stats(&ss);
+
+      /* Latch the integrity indicator on anything that costs samples. The
+         board is unattended; this is the only way the morning tells you the
+         night went wrong. */
+      if (ss.overflows || ss.ring_full || ss.faults || ss.start_err)
+      {
+        led_fault();
+      }
+
+      /* R2 gate, live. The die temperature of the block just written is in the
+         block header already -- storage_last_temp_raw() reads it back without
+         touching the bus, so the gate costs nothing and cannot perturb the
+         very measurement it guards. The comparison is against the span since
+         the record began, which is what TN-14 section 2.2 specifies: an
+         allowed Delta-T per record, not a rate. */
+      if (gate != 0U)
+      {
+        int32_t t_now = storage_last_temp_mc();
+        if (t_span_lo == INT32_MAX) { t_span_lo = t_span_hi = t_now; }
+        if (t_now < t_span_lo) { t_span_lo = t_now; }
+        if (t_now > t_span_hi) { t_span_hi = t_now; }
+
+        int within = ((t_span_hi - t_span_lo) <= (int32_t)gate);
+        led_thermal(1, within);
+        if (!within) { gate_broken = 1U; }
+      }
       console_printf("  %5lus %8lu samples  ring pk %lu  drop %lu  "
                      "wmax %lu us\r\n",
                      (unsigned long)el, (unsigned long)storage_sample_count(),
@@ -559,6 +653,7 @@ static void cmd_rec(int argc, char **argv)
 
   sampler_stop();
   (void)storage_task();
+  led_set_mode(LED_MODE_IDLE);
 
   uint64_t t1 = timebase_now_us();
   uint32_t gaps = sampler_lost_packets();
@@ -574,8 +669,9 @@ static void cmd_rec(int argc, char **argv)
                  "retries %lu\r\n",
                  (unsigned long)ss.chained, (unsigned long)ss.start_err,
                  (unsigned long)ss.chain_stuck, (unsigned long)ss.retries);
-  console_printf("  fifo peak %u B, overflows %lu\r\n",
-                 (unsigned)ss.fifo_peak, (unsigned long)ss.overflows);
+  console_printf("  fifo peak %u B, overflows %lu, recovered pulses %lu\r\n",
+                 (unsigned)ss.fifo_peak, (unsigned long)ss.overflows,
+                 (unsigned long)ss.recovered);
   uint32_t got      = storage_sample_count();
   uint32_t expected = (uint32_t)secs * (uint32_t)hz;
 
@@ -603,14 +699,34 @@ static void cmd_rec(int argc, char **argv)
       }
       else if (ss.overflows != 0U)
       {
-        console_printf("rec: *** FIFO OVERFLOW x%lu: sample count is right "
-                       "but continuity is not guaranteed ***\r\n",
-                       (unsigned long)ss.overflows);
+        /* Not a warning -- a verdict. An overflow means the FIFO wrapped and
+           overwrote samples the drain had not fetched, so the record has
+           silent discontinuities that no drop counter can see. The sample
+           count can still look plausible against the NOMINAL rate while the
+           true rate is 1% higher, which is exactly how the 28 July run passed
+           a 2% yield check while missing 25920 samples. */
+        console_printf("rec: *** FIFO OVERFLOW x%lu: %lu samples were "
+                       "overwritten before being read. RECORD NOT "
+                       "ADMISSIBLE ***\r\n",
+                       (unsigned long)ss.overflows,
+                       (unsigned long)(expected > got ? expected - got : 0U));
+      }
+      else if (gate_broken)
+      {
+        console_printf("rec: *** R2 THERMAL GATE FAILED: span %ld mK exceeds "
+                       "%lu mK. EXCISE THIS RECORD ***\r\n",
+                       (long)(t_span_hi - t_span_lo), (unsigned long)gate);
       }
       else
       {
-        console_printf("rec: yield OK, %lu of %lu nominal\r\n",
+        console_printf("rec: yield OK, %lu of %lu nominal",
                        (unsigned long)got, (unsigned long)expected);
+        if (gate != 0U)
+        {
+          console_printf(", thermal span %ld of %lu mK",
+                         (long)(t_span_hi - t_span_lo), (unsigned long)gate);
+        }
+        console_printf("\r\n");
       }
     }
   }

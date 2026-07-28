@@ -549,18 +549,38 @@ def cmd_rate(args) -> int:
     # uniform step is contiguous; anything else is a gap whose size is known
     # exactly, which is stronger evidence than the firmware's drop counters.
     d = np.diff(rec.tmst_us)
-    step = int(np.median(d))
-    if step > 0:
-        odd = np.flatnonzero(d != step)
-        print(f"  median step        {step} us")
-        print(f"  irregular steps    {odd.size} "
-              f"({100.0 * odd.size / max(d.size, 1):.4f}%)")
-        if odd.size:
-            missing = int(np.sum(np.round(d[odd] / step) - 1))
-            print(f"  implied missing    {missing} samples")
-            for i in odd[:10]:
-                print(f"    at sample {i + 1}: step {d[i]} us "
-                      f"({d[i] / step:.2f} x nominal)")
+    if d.size:
+        step = float(np.median(d))
+        mean_step = float(np.mean(d[d < 1.5 * step])) if step > 0 else 0.0
+        print(f"  median step        {step:.0f} counts")
+        print(f"  mean regular step  {mean_step:.4f} counts")
+
+        # The counter is an integer, so a non-integer true interval shows up as
+        # dither between adjacent values -- 117/118 rather than a constant 117.
+        # That is not a gap and must not be counted as one. Only a step of at
+        # least 1.5x the regular interval can be a genuinely missing sample.
+        gaps = np.flatnonzero(d > 1.5 * mean_step)
+        missing = (int(np.sum(np.round(d[gaps] / mean_step) - 1))
+                   if gaps.size else 0)
+        print(f"  dithered steps     "
+              f"{100.0 * np.count_nonzero(d != step) / d.size:.2f}% "
+              f"(integer counter, not gaps)")
+        print(f"  real gaps          {gaps.size}")
+        print(f"  implied missing    {missing} samples "
+              f"({100.0 * missing / max(rec.n, 1):.3f}%)")
+        for i in gaps[:10]:
+            print(f"    at sample {i + 1}: step {d[i]:.0f} counts "
+                  f"({d[i] / mean_step:.1f} x nominal)")
+
+        # TMST_RES nominally selects 1 us, but the counter is driven by the
+        # sensor's own clock divider and the design ratio need not be met.
+        nominal = (hdr.get("config") or {}).get("odr_nominal_hz")
+        res = (hdr.get("config") or {}).get("tmst_res_us", 1)
+        if nominal:
+            design = 1e6 / float(nominal) / float(res)
+            print(f"  counts per sample  {mean_step:.4f} measured, "
+                  f"{design:.4f} by design -> tick is "
+                  f"{design / mean_step:.6f} x the nominal {res} us")
     return 0 if rec.verify.ok else 1
 
 

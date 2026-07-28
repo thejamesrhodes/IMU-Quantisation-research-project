@@ -49,6 +49,7 @@ void icm_console_init(void);
 void validate_console_init(void);
 void storage_console_init(void);
 void xfer_console_init(void);
+#include "led.h"
 void sampler_on_int(uint16_t gpio_pin);   /* sampler.h; declared to avoid
                                              pulling in bus.h/record.h here */
 #include <stdarg.h>
@@ -402,6 +403,10 @@ int main(void)
      this is the only route from the instrument to analysis. */
   xfer_console_init();
 
+  /* Status indication for unattended runs. Must follow MX_GPIO_Init() and
+     timebase_init(). */
+  led_init();
+
   HAL_Delay(500);
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_RESET);
@@ -460,6 +465,7 @@ int main(void)
       rate_task();             /* finish an armed data-ready measurement     */
       usbd_composite_task();   /* deliver a pending DFU_DETACH out of the ISR */
       boot_ctrl_task();        /* healthy-boot latch, and the deferred reset  */
+      led_task();              /* status indication, non-blocking            */
   }
   /* USER CODE END 3 */
 }
