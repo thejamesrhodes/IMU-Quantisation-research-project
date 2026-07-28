@@ -92,6 +92,34 @@ void MX_USB_DEVICE_Init(void)
   /* USER CODE BEGIN USB_DEVICE_Init_PreTreatment */
 
   /* -------------------------------------------------------------------------
+   * DO NOT BRING UP USB WITHOUT VBUS.
+   *
+   * MX_USB_DEVICE_Init() is called from main() before MX_UART4_Init(),
+   * MX_ADC1_Init(), MX_I2C1_Init() and MX_SDMMC2_SD_Init(). If it blocks, none
+   * of those ever run -- no console, no card, no LEDs -- and the board looks
+   * dead rather than merely unenumerated. That is exactly what was observed on
+   * 28 July: all regulators at a nominal 3V3 on battery, but boot never
+   * reaching the LED4 stage.
+   *
+   * The OTG_HS internal PHY spins waiting for its LDO ready bit during core
+   * init, and that path has no business running when there is no host to talk
+   * to. Skipping it costs nothing: the console falls back to the USART1 mirror
+   * (SHEPPARD_CONSOLE_UART_MIRROR), cdc_put() returns immediately because
+   * dev_state stays at RESET rather than CONFIGURED, and everything downstream
+   * of USB -- the card, the sampler, the sequencer -- is untouched.
+   *
+   * Consequence, and it is deliberate: USB is decided ONCE at boot. Plugging a
+   * cable in afterwards will not enumerate. Battery runs are a distinct
+   * configuration, recorded as such in the header, and that is the honest
+   * representation -- a board that switched supply mid-record would be a worse
+   * problem than one that cannot.
+   * ---------------------------------------------------------------------- */
+  if (HAL_GPIO_ReadPin(VBUS_GPIO_Port, VBUS_Pin) != GPIO_PIN_SET)
+  {
+    return;
+  }
+
+  /* -------------------------------------------------------------------------
    * Promote the device descriptor to a composite / IAD device.
    *
    * CubeMX generates bDeviceClass = 0x02 (Communications) because it assumes a

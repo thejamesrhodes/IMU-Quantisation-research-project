@@ -755,6 +755,13 @@ class DatasetWindow(tk.Toplevel):
                                 small=True)
         self.b_del.pack(side="left", padx=4)
 
+        sep(bar, horizontal=False).pack(side="left", fill="y", padx=8)
+        self.b_ana = FlatButton(bar, "Analyse + figures", self.analyse_selected,
+                                small=True)
+        self.b_ana.pack(side="left", padx=4)
+        FlatButton(bar, "Open figures", self._open_figs,
+                   small=True).pack(side="left", padx=4)
+
         lb = tk.Frame(self, bg=C_EDGE)
         lb.pack(fill="both", expand=True, padx=10, pady=4)
         self.list = tk.Listbox(lb, bg=C_TERM, fg=C_TEXT, bd=0,
@@ -821,15 +828,16 @@ class DatasetWindow(tk.Toplevel):
             self._done()
         self.after(self.POLL_MS, self._poll)
 
-    def _start(self, fn, *a):
+    def _start(self, fn, *a, needs_board=True):
         if self._busy:
             return
-        if not self.board.connected.is_set():
+        if needs_board and not self.board.connected.is_set():
             self.stat_var.set("board not connected")
             return
         self._busy = True
         self.app._set_busy(True)
-        for b in (self.b_refresh, self.b_get, self.b_all, self.b_del):
+        for b in (self.b_refresh, self.b_get, self.b_all, self.b_del,
+                  self.b_ana):
             b.set_enabled(False)
         self._worker = threading.Thread(target=self._wrap, args=(fn,) + a,
                                         daemon=True)
@@ -853,7 +861,8 @@ class DatasetWindow(tk.Toplevel):
     def _done(self):
         self._busy = False
         self.app._set_busy(False)
-        for b in (self.b_refresh, self.b_get, self.b_all, self.b_del):
+        for b in (self.b_refresh, self.b_get, self.b_all, self.b_del,
+                  self.b_ana):
             b.set_enabled(True)
         self._render()
 
@@ -1004,6 +1013,75 @@ class DatasetWindow(tk.Toplevel):
         if extra:
             msg += " | " + extra
         return True, msg
+
+    # --- analysis ---------------------------------------------------------
+    #
+    # analyse.py is run as a subprocess rather than imported. It pulls in numpy
+    # and matplotlib, which are heavy and which fail in ways that would take the
+    # whole console down with them; and running it as a process means the GUI
+    # and the command line stay exactly equivalent, so a result you see here is
+    # reproducible by typing the same command.
+
+    @property
+    def figdir(self):
+        return self.app.cfg.get("fig_dir") or os.path.join(
+            find_project_root() or os.getcwd(), "Figures")
+
+    def _open_figs(self):
+        d = self.figdir
+        os.makedirs(d, exist_ok=True)
+        try:
+            os.startfile(d)                                # noqa: S606  (Windows)
+        except AttributeError:
+            import subprocess
+            subprocess.Popen(["xdg-open", d])
+
+    def analyse_selected(self):
+        sel = self._selected()
+        if not sel:
+            self.stat_var.set("select one or more records first")
+            return
+        here = [(n, s) for n, s in sel
+                if os.path.exists(os.path.join(self.dest, n))]
+        if not here:
+            self.stat_var.set("download them first — nothing to analyse")
+            return
+        self._start(self._ana_worker, here, needs_board=False)
+
+    def _ana_worker(self, files):
+        import subprocess
+
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "analyse.py")
+        figdir = self.figdir
+        os.makedirs(figdir, exist_ok=True)
+
+        for i, (name, _size) in enumerate(files, 1):
+            path = os.path.join(self.dest, name)
+            self._set(status=f"[{i}/{len(files)}] analysing {name}...",
+                      prog=(i - 1, len(files)))
+            self._log(f"--- analyse {name} ---")
+            try:
+                p = subprocess.run(
+                    [sys.executable, script, "all", path, "--figdir", figdir],
+                    capture_output=True, text=True, timeout=900)
+            except subprocess.TimeoutExpired:
+                self._log("analyse: timed out after 15 min")
+                continue
+            except Exception as e:                         # noqa: BLE001
+                self._log(f"analyse: could not run: {e}")
+                return
+
+            for line in (p.stdout or "").splitlines():
+                self._log(line)
+            for line in (p.stderr or "").splitlines():
+                self._log(f"! {line}")
+            if p.returncode != 0 and not p.stdout:
+                self._log(f"analyse: exited {p.returncode} — is numpy "
+                          f"installed?  pip install numpy matplotlib")
+
+        self._set(status=f"analysed {len(files)}; figures in {figdir}",
+                  prog=(len(files), len(files)))
 
     # --- delete -----------------------------------------------------------
 

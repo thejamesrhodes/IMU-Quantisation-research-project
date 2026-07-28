@@ -574,8 +574,14 @@ static void cmd_rec(int argc, char **argv)
     .label = label, .slot = slot, .odr_hz = hz, .fsr_dps = 2000,
     .ui_filt_bw = 0U, .aaf_floor = aaf_floor, .tmst_res_us = tmst_res,
     .watermark = icfg.watermark, .offset_user = 0,
-    .gate_mk = gate, .on_battery = 0U,
-    .usb_connected = (uint8_t)(console_cdc_ready() ? 1 : 0),
+    /* VBUS is sensed on PB13, so "which supply was this record taken on" is
+       recorded rather than assumed. It matters: the USB cable is both a power
+       path and a mechanical tether, and a record taken on battery is a
+       different electromagnetic and vibrational environment from one taken
+       wired. Without this the two are indistinguishable in the archive. */
+    .gate_mk = gate,
+    .on_battery = (uint8_t)(sheppard_vbus_present() ? 0 : 1),
+    .usb_connected = (uint8_t)(sheppard_vbus_present() ? 1 : 0),
   };
 
   char runid[20];

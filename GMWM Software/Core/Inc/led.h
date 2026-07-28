@@ -49,6 +49,16 @@ typedef enum {
   LED_MODE_BUSY,         /**< flashing firmware, transferring a file    */
 } led_mode_t;
 
+/**
+  * @brief  Non-zero when VBUS is present on PB13, i.e. USB is supplying power.
+  *
+  *         Recorded in every record header. A record taken on battery differs
+  *         from a wired one both electromagnetically and mechanically -- the
+  *         cable is a tether as well as a supply -- and without this the two
+  *         cannot be told apart in the archive.
+  */
+int sheppard_vbus_present(void);
+
 /** Call once from main(), after MX_GPIO_Init(). */
 void led_init(void);
 

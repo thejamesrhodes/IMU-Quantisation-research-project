@@ -7,13 +7,18 @@
 
 #include "led.h"
 #include "timebase.h"
+#include "sheppard_config.h"
 #include "main.h"
 
-/* The board's LEDs are active LOW: the pin sinks the cathode, so RESET lights
-   them. Getting this backwards gives an indicator that is on when it should be
-   off, which is worse than no indicator at all. */
-#define LED_ON   GPIO_PIN_RESET
-#define LED_OFF  GPIO_PIN_SET
+/* Polarity lives in sheppard_config.h. Getting it backwards gives an indicator
+   that is on when it should be off, which is worse than no indicator at all. */
+#if SHEPPARD_LED_ACTIVE_LOW
+  #define LED_ON   GPIO_PIN_RESET
+  #define LED_OFF  GPIO_PIN_SET
+#else
+  #define LED_ON   GPIO_PIN_SET
+  #define LED_OFF  GPIO_PIN_RESET
+#endif
 
 static volatile led_mode_t s_mode;
 static volatile uint8_t    s_fault;
@@ -48,6 +53,15 @@ void led_thermal(int active, int within)
 {
   s_gate_active = active ? 1U : 0U;
   s_gate_within = within ? 1U : 0U;
+}
+
+int sheppard_vbus_present(void)
+{
+  /* PB13 carries VBUS through a divider; high means the host is supplying 5 V.
+     Lives here rather than in a header as an inline so there is exactly one
+     definition of "is USB powering this board", used by both the record header
+     and any future power-path logic. */
+  return (HAL_GPIO_ReadPin(VBUS_GPIO_Port, VBUS_Pin) == GPIO_PIN_SET) ? 1 : 0;
 }
 
 void led_task(void)
