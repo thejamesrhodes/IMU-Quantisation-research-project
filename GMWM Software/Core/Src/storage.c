@@ -10,6 +10,7 @@
 #include "arena.h"
 #include "console.h"
 #include "timebase.h"
+#include "sampler.h"
 #include "sheppard_config.h"
 
 #include <stdio.h>
@@ -329,10 +330,16 @@ int storage_close(uint32_t n_gaps, uint64_t ts_first_us, uint64_t ts_last_us,
                          / (ts_last_us - ts_first_us));
   }
 
+  /* Integrity fields come from the sampler rather than being hard-coded to
+     zero, which is what they were: a record could not previously distinguish
+     a clean run from one that had been dropping transfers throughout. */
+  sampler_stats_t sst; sampler_get_stats(&sst);
+
   if (record_finalise_header(s_hdr, &s_cfg, s_runid, s_samples, n_gaps,
                              ts_first_us, ts_last_us, f_milli,
                              t_start_mc, t_end_mc,
-                             s_st.blocks_written, 0, 0) >= 0)
+                             s_st.blocks_written, sst.bus_busy,
+                             sst.faults + sst.start_err, sst.overflows) >= 0)
   {
     if (f_lseek(&s_fil, 0) == FR_OK)
     {
@@ -376,7 +383,6 @@ void storage_get_stats(storage_stats_t *out)
  * Console
  * ========================================================================== */
 
-#include "sampler.h"
 #include <stdlib.h>
 
 static void cmd_mount(int argc, char **argv)
@@ -524,13 +530,55 @@ static void cmd_rec(int argc, char **argv)
                  (unsigned long)ss.reads_started, (unsigned long)ss.ring_full,
                  (unsigned long)ss.bus_busy, (unsigned long)ss.faults,
                  (unsigned long)ss.watchdog_kicks);
-  console_printf("  chained drains %lu, start-err %lu\r\n",
-                 (unsigned long)ss.chained, (unsigned long)ss.start_err);
+  console_printf("  chained drains %lu, start-err %lu, chain-stuck %lu\r\n",
+                 (unsigned long)ss.chained, (unsigned long)ss.start_err,
+                 (unsigned long)ss.chain_stuck);
+  console_printf("  fifo peak %u B, overflows %lu\r\n",
+                 (unsigned)ss.fifo_peak, (unsigned long)ss.overflows);
+  uint32_t got      = storage_sample_count();
+  uint32_t expected = (uint32_t)secs * (uint32_t)hz;
+
   console_printf("  gaps %lu packets (%lu%% of expected)\r\n",
                  (unsigned long)gaps,
                  (unsigned long)((gaps * 100UL)
-                                 / ((uint32_t)(secs * hz) ? (uint32_t)(secs * hz) : 1U)));
+                                 / ((expected != 0U) ? expected : 1U)));
 
+  /* Yield check. The 28 July ODR 8000 run returned "0 dropped, gaps 0" while
+     delivering 235733 of 480000 samples: the FIFO had been silently
+     overwriting itself, so nothing the firmware counts as a drop had occurred.
+     A record can only be trusted if the sample COUNT is right, so compare
+     against the nominal rate directly and say so in the clear. The threshold
+     is 2%, comfortably outside the ~1% oscillator offset measured in TN-16
+     section 10.1 but far inside any real loss. */
+  {
+    if (expected != 0U)
+    {
+      if ((got + (expected / 50U)) < expected)
+      {
+        console_printf("rec: *** DATA LOSS: %lu of %lu samples (%lu%%). "
+                       "RECORD NOT ADMISSIBLE ***\r\n",
+                       (unsigned long)got, (unsigned long)expected,
+                       (unsigned long)((got * 100UL) / expected));
+      }
+      else if (ss.overflows != 0U)
+      {
+        console_printf("rec: *** FIFO OVERFLOW x%lu: sample count is right "
+                       "but continuity is not guaranteed ***\r\n",
+                       (unsigned long)ss.overflows);
+      }
+      else
+      {
+        console_printf("rec: yield OK, %lu of %lu nominal\r\n",
+                       (unsigned long)got, (unsigned long)expected);
+      }
+    }
+  }
+
+  /* n_gaps stays in packets. The overflow count is a different quantity with
+     different units -- an unknown number of packets lost per event -- so
+     storage_close() reads it from the sampler and writes it to the header as
+     its own field. A reader must be able to reject a record from the file
+     alone, without reference to the session log. */
   (void)storage_close(gaps, t0, t1, 0, 0);
 }
 

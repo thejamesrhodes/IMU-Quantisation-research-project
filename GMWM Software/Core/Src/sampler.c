@@ -53,6 +53,14 @@ static volatile uint8_t   s_step;
 static uint8_t  *volatile s_step_dst;
 static volatile uint16_t  s_step_len;
 
+static volatile uint64_t  s_chain_start_us;  /* liveness timeout reference  */
+
+/* The ICM FIFO is 2048 bytes; in 20-byte packet mode it holds 102 packets, so
+   2040 B is full. A count read returning at or near that means the FIFO
+   wrapped and samples were overwritten before we fetched them. */
+#define ICM_FIFO_BYTES        2048U
+#define ICM_FIFO_FULL_MARK    2000U
+
 static uint32_t          s_watchdog_us;
 static volatile uint32_t s_lost_packets;
 static sampler_stats_t   s_st;
@@ -121,9 +129,23 @@ static inline void pend_step(uint8_t step)
    one lost read into the phantom "20 packets" in the 28 July regression. */
 static void account_start_failure(int rc, uint32_t pkts_lost)
 {
-  if (rc == BUS_E_BUSY) { s_st.bus_busy++; }
-  else                  { s_st.start_err++; }
+  if (rc == BUS_E_BUSY)
+  {
+    /* Someone else owns the bus, which during a record can only be a transfer
+       belonging to the chain that is already running. Do NOT clear s_chain
+       here: that transfer's completion callback owns it, and stealing the flag
+       lets a second chain start concurrently and overwrite s_pending_pkts and
+       s_avail underneath the first one's data read -- silent corruption of the
+       byte count copied into the ring. The liveness timeout in sampler_poll()
+       is the backstop against a chain that never finishes. */
+    s_st.bus_busy++;
+    return;
+  }
 
+  s_st.start_err++;
+
+  /* On BUS_E_FAULT the bus layer already ran the completion callback with a
+     fault status, which does its own accounting and clears the chain. */
   if (rc != BUS_E_FAULT)
   {
     s_lost_packets += pkts_lost;
@@ -153,16 +175,17 @@ static void on_data(bus_slot_t slot, int status, void *ctx)
 
   storage_advance(n, s_t_pending, s_avail, 0U);
 
-  /* Still above the watermark? Then no new pulse is coming -- go round again
-     rather than wait for one that will not arrive. */
-  if (s_avail > (uint16_t)(n + s_wm))
-  {
-    s_st.chained++;
-    pend_step(STEP_COUNT);
-    return;
-  }
-
-  s_chain = 0U;
+  /* Always go round and re-read FIFO_COUNT. The chain terminates in on_count()
+     when the FIFO is found below the watermark, because only then is a pulse
+     guaranteed to arrive -- the interrupt fires on the upward crossing, so
+     stopping while still above the threshold means no further transition, no
+     further interrupt, and a stream that dies silently.
+     The previous condition, `s_avail > n + s_wm`, could never be true: n is
+     s_avail rounded down to a packet boundary, so it asked whether
+     s_avail > s_avail + watermark. That is why `chained drains` read 0 at every
+     ODR, and why ODR 8000 ran at half rate on watchdog kicks alone. */
+  s_st.chained++;
+  pend_step(STEP_COUNT);
 }
 
 static void on_count(bus_slot_t slot, int status, void *ctx)
@@ -172,6 +195,20 @@ static void on_count(bus_slot_t slot, int status, void *ctx)
   if (status != BUS_OK) { s_st.faults++; s_chain = 0U; return; }
 
   s_avail = (uint16_t)(((uint16_t)s_cnt[1] << 8) | s_cnt[2]);
+  if (s_avail > s_st.fifo_peak) { s_st.fifo_peak = s_avail; }
+
+  /* At capacity the FIFO has wrapped and samples were overwritten before we
+     fetched them. FIFO_COUNT saturates, so the firmware cannot say how many --
+     the run is flagged rather than silently patched, and the packet timestamps
+     let the reader locate each discontinuity exactly. A record with a non-zero
+     overflow count is not admissible under R1. */
+  if (s_avail >= ICM_FIFO_FULL_MARK) { s_st.overflows++; }
+
+  /* Below the watermark the level will cross it from below as new samples
+     arrive, so a pulse IS coming and the chain can stop here. At or above it,
+     no transition occurs and no pulse will come, so the chain must continue or
+     the stream latches. This test is the one that keeps the drain alive. */
+  if (s_avail < s_wm) { s_chain = 0U; return; }
 
   uint32_t pkts = s_avail / ICM_PACKET4_LEN;
   if (pkts == 0U) { s_chain = 0U; return; }
@@ -201,7 +238,8 @@ static void on_count(bus_slot_t slot, int status, void *ctx)
 
 static void start_count_read(uint64_t t)
 {
-  s_t_pending = t;
+  s_t_pending      = t;
+  s_chain_start_us = timebase_now_us();
   s_cnt_tx[0] = (uint8_t)(ICM_FIFO_COUNTH | 0x80U);
   s_cnt_tx[1] = 0U;
   s_cnt_tx[2] = 0U;
@@ -234,7 +272,14 @@ void sampler_pendsv(void)
   }
   else if (step == STEP_COUNT)
   {
-    start_count_read(s_t_pending);
+    /* A continuation has no interrupt instant of its own, so it is anchored to
+       the moment the read is initiated. The rule across both cases is the same:
+       the block timestamp is when the read that filled it STARTED, never when
+       the transfer completed. Per-sample timing comes from the packet TMST
+       field; the block timestamp exists to anchor that 16-bit counter against
+       TIM2, so reusing the original interrupt time here would place a block of
+       later-fetched samples at an anchor several milliseconds in its past. */
+    start_count_read(timebase_now_us());
   }
 }
 
@@ -244,7 +289,7 @@ void sampler_pendsv(void)
 
 void sampler_on_int(uint16_t gpio_pin)
 {
-  if (!s_running || gpio_pin != s_int_pin[s_slot]) { return; }
+  if (!s_running || gpio_pin != s_int_pin[(int)s_slot]) { return; }
 
   /* First thing, before any SPI: the timestamp must refer to the sample
      instant, not to whenever the transfer happened to complete. */
@@ -281,21 +326,64 @@ void sampler_on_int(uint16_t gpio_pin)
 
 void sampler_poll(void)
 {
-  if (!s_running || s_chain) { return; }
+  if (!s_running) { return; }
 
-  uint64_t now = timebase_now_us();
-  if ((now - s_last_int_us) < (uint64_t)s_watchdog_us) { return; }
+  uint64_t now;
+  uint8_t  claim = 0U;
+  uint8_t  stuck = 0U;
 
-  /* No interrupt for several expected intervals and no chain running. Either
-     the pulse was missed and the level has latched, or the sensor has stopped.
-     Kick a drain chain: it reads FIFO_COUNT itself, so it costs nothing if
-     the FIFO is genuinely empty and recovers the stream if it is not.
-     No blocking SPI here -- the earlier version called icm_fifo_count()
-     synchronously and stole the bus from the interrupt path, which is what
-     produced `busy 95`. */
-  s_last_int_us = now;
+  /* The whole decision is taken with interrupts off. Read `now` and
+     `s_last_int_us` separately and an interrupt landing between them makes
+     `last` LATER than `now`; the unsigned subtraction then underflows to
+     roughly 2^64 and the watchdog fires spuriously. That is the entire source
+     of the "busy 20 / wdog 20" and "busy 117 / wdog 117" in the 28 July runs --
+     the counts matched exactly because each bogus kick was refused by the bus
+     that the interrupt had just claimed. A 64-bit read is also two loads on
+     Cortex-M and so not atomic against the ISR that writes it. */
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+
+  now = timebase_now_us();
+
+  if (s_chain)
+  {
+    /* Liveness backstop. A chain that has not completed in several watchdog
+       periods has lost its completion callback somewhere; abandon it so the
+       stream can be revived. This replaces the old behaviour of clearing
+       s_chain whenever a start was refused, which cleared it while a transfer
+       was genuinely in flight. */
+    if ((now > s_chain_start_us) &&
+        ((now - s_chain_start_us) > (uint64_t)s_watchdog_us * 4ULL))
+    {
+      s_chain = 0U;
+      s_step  = STEP_NONE;
+      stuck   = 1U;
+    }
+  }
+  else if ((now > s_last_int_us) &&
+           ((now - s_last_int_us) >= (uint64_t)s_watchdog_us))
+  {
+    /* No interrupt for several expected intervals and no chain running: either
+       a pulse was missed and the level has latched, or the sensor has stopped.
+       Start a drain chain. It reads FIFO_COUNT itself, so it costs one 3-byte
+       transfer if the FIFO is genuinely quiet and recovers the stream if it is
+       not. No blocking SPI here -- the earlier version called icm_fifo_count()
+       synchronously and stole the bus from the interrupt path. */
+    s_last_int_us = now;
+    s_chain       = 1U;
+    claim         = 1U;
+  }
+
+  if (primask == 0U) { __enable_irq(); }
+
+  if (stuck)
+  {
+    s_st.chain_stuck++;
+    return;
+  }
+  if (!claim) { return; }
+
   s_st.watchdog_kicks++;
-  s_chain = 1U;
   start_count_read(now);
 }
 
@@ -321,9 +409,10 @@ int sampler_start(bus_slot_t slot, uint16_t watermark_bytes, long odr_hz)
   s_wm   = watermark_bytes;
   memset(&s_st, 0, sizeof s_st);
   s_lost_packets = 0U;
-  s_chain        = 0U;
-  s_step         = STEP_NONE;
-  s_last_int_us  = timebase_now_us();
+  s_chain          = 0U;
+  s_step           = STEP_NONE;
+  s_last_int_us    = timebase_now_us();
+  s_chain_start_us = s_last_int_us;
 
   /* PendSV at the lowest priority. It must tail-chain only once every pending
      interrupt has been serviced -- that is the entire reason the chain lives
@@ -346,7 +435,16 @@ int sampler_start(bus_slot_t slot, uint16_t watermark_bytes, long odr_hz)
     uint32_t interval_us = (uint32_t)((pkts * 1000000ULL) / (uint32_t)odr_hz);
 
     s_watchdog_us = 4U * interval_us;
-    if (s_watchdog_us < 20000U)   { s_watchdog_us = 20000U; }    /* 20 ms  */
+
+    /* Never let the watchdog period approach the time the FIFO takes to fill
+       from empty, or a missed pulse becomes an overflow before the watchdog
+       notices. At ODR 8000 the 2048-byte FIFO fills in 12.8 ms, so the old
+       20 ms floor guaranteed data loss on every missed service. */
+    uint32_t fill_us = (uint32_t)((ICM_FIFO_BYTES * 1000000ULL)
+                                  / ((uint64_t)odr_hz * ICM_PACKET4_LEN));
+    if (s_watchdog_us > (fill_us / 2U)) { s_watchdog_us = fill_us / 2U; }
+
+    if (s_watchdog_us < 2000U)    { s_watchdog_us = 2000U; }     /* 2 ms   */
     if (s_watchdog_us > 2000000U) { s_watchdog_us = 2000000U; }  /* 2 s    */
   }
 

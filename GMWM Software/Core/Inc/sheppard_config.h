@@ -27,8 +27,8 @@ extern "C" {
 #define SHEPPARD_FW_NAME            "sheppard"
 #define SHEPPARD_FW_VERSION_MAJOR   0
 #define SHEPPARD_FW_VERSION_MINOR   2
-#define SHEPPARD_FW_VERSION_PATCH   7
-#define SHEPPARD_FW_VERSION_STR     "0.2.7"
+#define SHEPPARD_FW_VERSION_PATCH   8
+#define SHEPPARD_FW_VERSION_STR     "0.2.8"
 
 /* OPTIMISATION LEVEL IS A SCIENCE PARAMETER -- TN-16 open item 20.
  * Frozen at -Os from 28 July 2026, tag Stage-B-chained-dma-Os onwards. All
@@ -42,7 +42,7 @@ extern "C" {
 
 /* Free-text build tag. Change this when the build differs in any way that
    could touch the data, and log it in every record header. */
-#define SHEPPARD_BUILD_TAG          "Stage-B-pendsv-chain-Os"
+#define SHEPPARD_BUILD_TAG          "Stage-B-drain-chain-Os"
 
 /* ==========================================================================
  * Flash layout

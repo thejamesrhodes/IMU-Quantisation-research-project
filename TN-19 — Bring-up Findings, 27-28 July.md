@@ -135,6 +135,34 @@ A separate accounting bug was found in the same decomposition: a failed start wa
 
 **Generalisation.** Any callback in this firmware that runs from a HAL DMA completion — bus, storage, or future sensor drivers — must not start a new DMA transfer on the same peripheral. Defer it.
 
+### 5.1 The chain condition was dead code, and the loss was invisible
+
+With the PendSV fix in place, ODR 100 and 1000 recorded cleanly. ODR 8000 delivered **235,733 of 480,000 samples — 49% — while reporting `0 dropped, gaps 0`.** `f_measured` read 3928.859 Hz against a nominal 8000.
+
+The chain re-entry test was
+
+```c
+if (s_avail > (uint16_t)(n + s_wm))
+```
+
+where `n` is `s_avail` truncated to a packet boundary. It therefore asked whether `s_avail > s_avail + watermark`, which is never true — `chained drains` read 0 at *every* ODR, and the drain had been doing one read per interrupt throughout. At ODR 100 and 1000 one read per interrupt is sufficient, so the fault was invisible. At ODR 8000 the read leaves the FIFO above the watermark, the pulsed interrupt has no upward crossing to fire on, and the stream survives only on watchdog kicks — 55 reads per second against the 160 required.
+
+The test is now inverted and moved to `on_count()`: **continue while `FIFO_COUNT ≥ watermark`, stop below it.** Only below the watermark is a further pulse guaranteed, so that is the only safe place to stop.
+
+Two further faults were found in the same output.
+
+**Spurious watchdog kicks from an unsigned underflow.** `busy` equalled `wdog` exactly at both ODR 100 (20/20) and ODR 1000 (117/117) — a ratio of 9.9% and 9.6% of interrupts respectively, which is the signature of a per-interrupt race rather than a timing threshold. `sampler_poll()` read `now`, then `s_last_int_us`; an interrupt landing between the two makes `last` later than `now`, and `now - last` underflows to ≈2⁶⁴. The kick then collides with the chain the interrupt just started. The whole decision is now taken with interrupts masked, which also fixes the non-atomic 64-bit read.
+
+**A refused start stole the chain flag.** `account_start_failure()` cleared `s_chain` on `BUS_E_BUSY`, i.e. while a transfer was genuinely in flight, allowing a second chain to overwrite `s_pending_pkts` and `s_avail` underneath the first one's data read — the byte count copied into the ring would then be wrong. This is the likely origin of the 94 reads that were started but never completed in the ODR 8000 run. `s_chain` is now released only by its owner, with a liveness timeout in `sampler_poll()` as the backstop.
+
+**Reporting.** A run that loses half its samples must not report success. Three changes:
+
+- `FIFO_COUNT` at or above 2000 B means the 2048-byte FIFO wrapped and samples were overwritten. This is now counted (`overflows`) and written to the `.sdat` header as `integrity.fifo_overflows`.
+- The header's `bus_overruns` and `bus_faults` were hard-coded to zero. They now carry the real sampler counters, so a record can be judged from the file alone.
+- `rec` compares delivered samples against `secs × nominal ODR` and prints **`DATA LOSS … RECORD NOT ADMISSIBLE`** below 98%. The threshold sits outside the ~1% oscillator offset of TN-16 §10.1 and far inside any real loss.
+
+The watchdog period is additionally clamped to half the FIFO fill time (12.8 ms at ODR 8000), since the previous 20 ms floor guaranteed an overflow before the watchdog could notice a missed pulse.
+
 ---
 
 ## 6. Open items this creates
@@ -157,3 +185,4 @@ A separate accounting bug was found in the same decomposition: a failed start wa
 |---|---|---|
 | 1.0 | 28 Jul 2026 | Initial issue. V0.4 answered; three datasheet corrections; signal-chain validation; bench noise 8× below the §11 baseline |
 | 1.1 | 28 Jul 2026 | Added §5, the SPI DMA re-arm fault and the PendSV chain fix (fw 0.2.7, tag `Stage-B-pendsv-chain-Os`) |
+| 1.2 | 28 Jul 2026 | Added §5.1: dead chain condition, watchdog underflow, stolen chain flag, and the yield/overflow reporting that would have caught the 49% ODR 8000 run (fw 0.2.8, tag `Stage-B-drain-chain-Os`) |
