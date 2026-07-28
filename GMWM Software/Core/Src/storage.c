@@ -48,6 +48,8 @@ static char     s_runid[24];
 static record_cfg_t s_cfg;
 static uint32_t s_last_sync_ms;
 static uint64_t s_ts_first;
+static uint64_t s_ts_last;      /* trigger instant of the most recent read  */
+static uint32_t s_first_pkts;   /* packets delivered by the FIRST read      */
 static storage_stats_t s_st;
 
 /* One header scratch, shared by open and close. They were separate 4 KiB
@@ -74,10 +76,15 @@ static void commit_head(uint16_t extra_flags)
   h->n_packets = (uint16_t)(s_fill / ICM_PACKET4_LEN);
   h->flags    |= extra_flags;
   if (s_fill < PAYLOAD_BYTES) { h->flags |= SDAT_F_PARTIAL; }
-  h->crc32 = record_crc32(b + SDAT_BLKHDR_BYTES, PAYLOAD_BYTES);
 
+  /* Zero the unused tail BEFORE the CRC. The CRC covers the whole 4000-byte
+     payload, so computing it first and clearing afterwards stores a checksum
+     over bytes the file does not contain -- every partial block would fail
+     verification, and there is one at the end of every record. */
   memset(b + SDAT_BLKHDR_BYTES + s_fill, 0,
          SDAT_BLOCK_BYTES - SDAT_BLKHDR_BYTES - s_fill);
+
+  h->crc32 = record_crc32(b + SDAT_BLKHDR_BYTES, PAYLOAD_BYTES);
 
   s_fill = 0U;
   s_seq++;
@@ -113,6 +120,25 @@ void storage_advance(uint16_t bytes, uint64_t t_us, uint16_t fifo_bytes,
 {
   if (!s_open || bytes == 0U) { return; }
 
+  /* Rate reference. Read i is triggered at t_i and delivers the k_i packets
+     that accumulated over (t_{i-1}, t_i], so the samples falling strictly
+     inside the window (t_1, t_M] number N - k_1 and
+
+         f = (N - k_1) / (t_M - t_1)
+
+     is unbiased. Deriving f from the `rec` loop bounds instead is not: the
+     residual FIFO contents are discarded at stop, so the count is always a
+     whole number of watermark reads and f is biased low by up to one watermark
+     over the run. That is 0.5% over a 20 s run at ODR 100 but 0.01% at ODR
+     8000, which is exactly the spread seen on 28 July (+0.920% vs +1.070%) and
+     would otherwise have been read as an ODR-dependent oscillator effect. */
+  if (s_ts_first == 0U)
+  {
+    s_ts_first   = t_us;
+    s_first_pkts = (uint32_t)(bytes / ICM_PACKET4_LEN);
+  }
+  s_ts_last = t_us;
+
   uint8_t *b = blk(s_head);
   sdat_block_hdr_t *h = (sdat_block_hdr_t *)b;
 
@@ -127,7 +153,6 @@ void storage_advance(uint16_t bytes, uint64_t t_us, uint16_t fifo_bytes,
        in the block header so a reader can check it without decoding. */
     const uint8_t *p0 = b + SDAT_BLKHDR_BYTES;
     h->temp_raw = (uint16_t)(((uint16_t)p0[0x0D] << 8) | p0[0x0E]);
-    if (s_ts_first == 0U) { s_ts_first = t_us; }
   }
 
   h->flags     |= flags;
@@ -285,7 +310,9 @@ int storage_open(const record_cfg_t *cfg, const char *run_id)
   }
 
   s_head = s_tail = s_fill = s_seq = s_samples = 0;
-  s_ts_first = 0;
+  s_ts_first   = 0;
+  s_ts_last    = 0;
+  s_first_pkts = 0;
   memset(&s_st, 0, sizeof s_st);
   s_last_sync_ms = HAL_GetTick();
   s_open = 1U;                              /* arms the producer, last */
@@ -297,6 +324,8 @@ int storage_open(const record_cfg_t *cfg, const char *run_id)
 int storage_close(uint32_t n_gaps, uint64_t ts_first_us, uint64_t ts_last_us,
                   int32_t t_start_mc, int32_t t_end_mc)
 {
+  (void)ts_first_us; (void)ts_last_us;   /* superseded by the tracked reads */
+
   if (!s_open) { return -1; }
 
   s_open = 0U;                              /* stop the producer first */
@@ -308,10 +337,10 @@ int storage_close(uint32_t n_gaps, uint64_t ts_first_us, uint64_t ts_last_us,
     sdat_block_hdr_t *h = (sdat_block_hdr_t *)b;
     h->n_packets = (uint16_t)(s_fill / ICM_PACKET4_LEN);
     h->flags    |= SDAT_F_PARTIAL;
+    memset(b + SDAT_BLKHDR_BYTES + s_fill, 0,           /* zero, then CRC */
+           SDAT_BLOCK_BYTES - SDAT_BLKHDR_BYTES - s_fill);
     h->crc32     = record_crc32(b + SDAT_BLKHDR_BYTES,
                                 (uint32_t)SDAT_MAX_PACKETS * ICM_PACKET4_LEN);
-    memset(b + SDAT_BLKHDR_BYTES + s_fill, 0,
-           SDAT_BLOCK_BYTES - SDAT_BLKHDR_BYTES - s_fill);
     s_fill = 0U;
     s_seq++;
     s_head++;
@@ -322,12 +351,17 @@ int storage_close(uint32_t n_gaps, uint64_t ts_first_us, uint64_t ts_last_us,
   /* f_measured, in milli-Hz, from the board clock against the sample count.
      Two independent clocks: TIM2 here, and the sensor's own TMST inside every
      packet. Their disagreement is TN-16 section 10.1's sensor-oscillator
-     figure, recoverable per record in analysis. */
+     figure, recoverable per record in analysis.
+
+     Taken between the FIRST and LAST read triggers, not the caller's window --
+     see the note in storage_advance(). The caller's ts_first_us/ts_last_us are
+     kept as the run's wall-clock bounds, which is what they honestly are, but
+     they are not a rate reference. */
   uint32_t f_milli = 0;
-  if (ts_last_us > ts_first_us && s_samples > 1U)
+  if ((s_ts_last > s_ts_first) && (s_samples > s_first_pkts))
   {
-    f_milli = (uint32_t)(((uint64_t)(s_samples - 1U) * 1000000000ULL)
-                         / (ts_last_us - ts_first_us));
+    f_milli = (uint32_t)(((uint64_t)(s_samples - s_first_pkts) * 1000000000ULL)
+                         / (s_ts_last - s_ts_first));
   }
 
   /* Integrity fields come from the sampler rather than being hard-coded to
@@ -335,8 +369,12 @@ int storage_close(uint32_t n_gaps, uint64_t ts_first_us, uint64_t ts_last_us,
      a clean run from one that had been dropping transfers throughout. */
   sampler_stats_t sst; sampler_get_stats(&sst);
 
+  /* ts_first_us/ts_last_us in the header are the first and last READ TRIGGERS,
+     which is what the field names claim and what the reader needs to anchor
+     the packet TMST counter. The caller's loop bounds are wall-clock overhead
+     and would misrepresent the sampling window. */
   if (record_finalise_header(s_hdr, &s_cfg, s_runid, s_samples, n_gaps,
-                             ts_first_us, ts_last_us, f_milli,
+                             s_ts_first, s_ts_last, f_milli,
                              t_start_mc, t_end_mc,
                              s_st.blocks_written, sst.bus_busy,
                              sst.faults + sst.start_err, sst.overflows) >= 0)
