@@ -27,12 +27,22 @@ extern "C" {
 #define SHEPPARD_FW_NAME            "sheppard"
 #define SHEPPARD_FW_VERSION_MAJOR   0
 #define SHEPPARD_FW_VERSION_MINOR   2
-#define SHEPPARD_FW_VERSION_PATCH   3
-#define SHEPPARD_FW_VERSION_STR     "0.2.3"
+#define SHEPPARD_FW_VERSION_PATCH   7
+#define SHEPPARD_FW_VERSION_STR     "0.2.7"
+
+/* OPTIMISATION LEVEL IS A SCIENCE PARAMETER -- TN-16 open item 20.
+ * Frozen at -Os from 28 July 2026, tag Stage-B-chained-dma-Os onwards. All
+ * bring-up data before this (V0.4, M1, the drift runs) was taken at -O0.
+ * The original concern was SPI timing; with the transfers now driven by DMA
+ * that is hardware-determined rather than code-determined, and what remains
+ * is ISR latency (a fixed, calibratable offset) and bus duty cycle, which
+ * rule R8 already controls as a confound. Do not change it again mid-campaign
+ * -- doing so splits the dataset. */
+#define SHEPPARD_OPT_LEVEL          "-Os"
 
 /* Free-text build tag. Change this when the build differs in any way that
    could touch the data, and log it in every record header. */
-#define SHEPPARD_BUILD_TAG          "Stage-B-overnight-drift"
+#define SHEPPARD_BUILD_TAG          "Stage-B-pendsv-chain-Os"
 
 /* ==========================================================================
  * Flash layout

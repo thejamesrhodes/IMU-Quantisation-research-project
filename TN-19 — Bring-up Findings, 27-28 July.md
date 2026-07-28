@@ -100,7 +100,44 @@ Either could account for a large part of 8×. The comparison is **suggestive, no
 
 ---
 
-## 5. Open items this creates
+## 5. Firmware fault: an SPI DMA transfer must not be re-armed from its own completion callback
+
+Recorded because it is a silent, total data-loss mode that presented as a plausible-looking short record rather than as an error, and because the same trap exists on every ST HAL SPI/DMA path in this project.
+
+**Symptom.** After the sampler was changed from a fixed-length read to a chained drain (read `FIFO_COUNT`, then read exactly that many packets), `rec smoke 20 100` — a configuration that had previously produced 2020 samples with zero drops — returned:
+
+```
+rec: irq 1, reads 0/0, ring-full 0, busy 50, faults 50, wdog 49
+  chained drains 0
+  gaps 20 packets (1% of expected)
+  0 samples, 0 blocks, 0 dropped, 0 B
+```
+
+**Diagnosis from the counters alone.** The two failure paths in the sampler have distinguishable arithmetic signatures:
+
+- count read succeeds, data-read *start* fails → `finish()` runs `on_data(FAULT)` (faults +1, lost +10 packets), then the caller adds `bus_busy` +1 and lost +10 → **(1, 1, 20 packets)**
+- count-read *start* fails → `on_count(FAULT)` (faults +1), caller adds `bus_busy` +1 → **(1, 1, 0 packets)**
+
+Totals of 50 faults, 50 busy and 20 lost packets therefore decompose uniquely as **one** of the first kind followed by **49** of the second. One interrupt plus 49 watchdog kicks is exactly 50 chain starts. So the first chained start failed, and every attempt thereafter failed instantly and identically — the slot was dead, not merely unlucky.
+
+**Mechanism.** `HAL_SPI_TransmitReceive_DMA()` arms the RX stream first, then the TX stream. TX and RX are separate NVIC lines at equal priority — for SPI1, DMA2_Stream2 is IRQ 58 (RX) and DMA2_Stream3 is IRQ 59 (TX). Equal priority means no preemption, and the NVIC serves the lower number first, so the RX completion handler runs while the TX handler is **still pending**. `hdmatx->State` is therefore still `HAL_DMA_STATE_BUSY`, and `HAL_DMA_Start_IT()` refuses (`stm32f7xx_hal_dma.c` sets `State = BUSY` at start and only clears it in the IRQ handler; the TC interrupt is enabled unconditionally, so this is purely an ordering effect, not a missing interrupt).
+
+The damage is in the HAL's failure path: having already armed RX, it returns on the TX failure **without un-arming it**. `hdmarx->State` stays `BUSY` for the rest of the run, so every subsequent `HAL_SPI_TransmitReceive_DMA()` on that slot fails at the first `HAL_DMA_Start_IT()`. One badly-timed re-arm bricks the peripheral until reset.
+
+Note that `hspi->State` is *not* the culprit: `SPI_DMATransmitReceiveCplt()` sets `HAL_SPI_STATE_READY` at line 3285, before invoking the user callback at line 3311. The obvious hypothesis — that the SPI state machine is still busy — is wrong, and checking it in the source rather than assuming it is what pointed at the DMA streams.
+
+**Fix, two parts.**
+
+1. *Structural.* Each chain step is deferred to **PendSV** rather than issued from the bus completion callback. PendSV tail-chains only once every pending interrupt has been serviced, which is precisely the condition the HAL requires; and because it is an exception rather than main-loop code, it still preempts thread mode, so the drain continues through a 33 ms `f_write` stall. That was the entire reason for not putting the chain in the main loop, and it is preserved. PendSV is set to priority 15 in `sampler_start()`.
+2. *Defensive.* `bus_xfer_async()` now calls `HAL_SPI_Abort()` whenever a DMA start fails, returning both streams and the SPI state machine to `READY`. Whatever the cause, a failed start now costs one read instead of the remainder of the record.
+
+A separate accounting bug was found in the same decomposition: a failed start was charged to `s_lost_packets` twice, once in the completion callback and once in the caller. That is the phantom "20 packets" above, and it is now charged in one place only.
+
+**Generalisation.** Any callback in this firmware that runs from a HAL DMA completion — bus, storage, or future sensor drivers — must not start a new DMA transfer on the same peripheral. Defer it.
+
+---
+
+## 6. Open items this creates
 
 | Item | Priority | Note |
 |---|---|---|
@@ -114,8 +151,9 @@ Either could account for a large part of 8×. The comparison is **suggestive, no
 
 ---
 
-## 6. Change log
+## 7. Change log
 
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 28 Jul 2026 | Initial issue. V0.4 answered; three datasheet corrections; signal-chain validation; bench noise 8× below the §11 baseline |
+| 1.1 | 28 Jul 2026 | Added §5, the SPI DMA re-arm fault and the PendSV chain fix (fw 0.2.7, tag `Stage-B-pendsv-chain-Os`) |

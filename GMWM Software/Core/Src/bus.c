@@ -201,6 +201,18 @@ int bus_xfer_async(bus_slot_t slot, const uint8_t *tx, uint8_t *rx,
   {
     if (HAL_SPI_TransmitReceive_DMA(c->hspi, (uint8_t *)tx, dst, len) != HAL_OK)
     {
+      /* A failed start is not necessarily harmless: HAL_SPI_TransmitReceive_DMA
+         arms the RX stream BEFORE the TX stream, and if the TX start fails it
+         returns without un-arming RX. hdmarx->State is then left BUSY for ever
+         and every subsequent transfer on this slot fails at the first
+         HAL_DMA_Start_IT -- the slot is bricked until reset.
+         That is precisely what happened on 28 July: one chained read issued
+         from inside HAL_SPI_TxRxCpltCallback failed (the other stream's IRQ was
+         still pending, so its state was BUSY), and the remaining 49 attempts in
+         the record all failed instantly. Aborting here returns both streams and
+         the SPI state machine to READY, so a failed start costs one read rather
+         than the whole record. */
+      (void)HAL_SPI_Abort(c->hspi);
       finish((int)slot, BUS_E_FAULT);
       return BUS_E_FAULT;
     }

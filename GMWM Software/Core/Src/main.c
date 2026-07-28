@@ -47,6 +47,9 @@
  */
 void icm_console_init(void);
 void validate_console_init(void);
+void storage_console_init(void);
+void sampler_on_int(uint16_t gpio_pin);   /* sampler.h; declared to avoid
+                                             pulling in bus.h/record.h here */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -392,6 +395,7 @@ int main(void)
   /* Registers the `icm` and `fifo` commands, and `m1`. */
   icm_console_init();
   validate_console_init();
+  storage_console_init();
 
   HAL_Delay(500);
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_RESET);
@@ -1811,6 +1815,8 @@ static void rate_task(void)
    no SPI, no HAL_Delay, no uart_log in here. */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+  /* Edge counting, for the `rate` true-ODR measurement. Cheap enough to leave
+     running always -- 25 to 8000 increments per second. */
   for (int i = 0; i < 4; i++) {
     if (g_buses[i].int_pin == GPIO_Pin) {
       g_drdy_count[i]++;
@@ -1818,6 +1824,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
       break;
     }
   }
+
+  /* Then the logger. While a record is open, INT1 carries the FIFO watermark
+     rather than data-ready, and this starts the DMA burst that empties it.
+     Does nothing when no record is running. Kept last so the counters above
+     are updated even if the sampler returns early. */
+  sampler_on_int(GPIO_Pin);
 }
 
 /* USER CODE END 4 */

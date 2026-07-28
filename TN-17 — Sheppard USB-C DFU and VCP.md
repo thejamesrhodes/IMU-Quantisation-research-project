@@ -256,6 +256,11 @@ CubeMX restores anything outside USER CODE markers. After any `.ioc` regeneratio
       templates the two size lines but leaves the `MEMORY` block and the
       `.dtcm` section alone, so the DTCM/SRAM1 split survives while the stack
       silently shrinks to `0x400`
+- [ ] `Core/Src/stm32f7xx_it.c` — `#include "sampler.h"` in `USER CODE BEGIN
+      Includes` and `sampler_pendsv();` in `USER CODE BEGIN PendSV_IRQn 0`.
+      Both sit inside USER CODE markers so they *should* survive, but losing
+      them is silent: the drain chain stalls after its first step and every
+      record comes back empty with `reads 0/0` (TN-19 §5)
 - [ ] confirm the new source files are still in the build path (`Core/Src`, `USB_DEVICE/App`)
 - [ ] confirm `USER CODE BEGIN Includes` in `usb_device.c` still carries the `USBD_CDC` redirect, and `PreTreatment` the descriptor patch
 - [ ] confirm `CDC_Receive_HS` still calls `fw_rx_isr()` before `console_rx_feed()`, and still ends with the `SetRxBuffer` / `ReceivePacket` pair

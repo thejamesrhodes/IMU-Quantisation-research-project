@@ -22,6 +22,7 @@
 #include "stm32f7xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "sampler.h"
 /* USER CODE END Includes */
 
 /* External functions --------------------------------------------------------*/
@@ -180,7 +181,11 @@ void DebugMon_Handler(void)
 void PendSV_Handler(void)
 {
   /* USER CODE BEGIN PendSV_IRQn 0 */
-
+  /* Sheppard: the sensor drain chain runs here. See sampler.h -- an SPI DMA
+     transfer must not be re-armed from inside HAL_SPI_TxRxCpltCallback, so each
+     step is deferred to PendSV, which tail-chains once every pending interrupt
+     has been serviced. Restore this call after any CubeMX regeneration. */
+  sampler_pendsv();
   /* USER CODE END PendSV_IRQn 0 */
   /* USER CODE BEGIN PendSV_IRQn 1 */
 

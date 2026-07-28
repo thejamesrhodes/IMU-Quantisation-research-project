@@ -83,12 +83,21 @@ const char *storage_filename(void);
 /* ---- producer side, called from interrupt context ----------------------- */
 
 /**
-  * @brief  Claim the block currently being filled, and tell the caller how
-  *         much room is left in its payload.
-  * @retval pointer to the next free byte of payload, or NULL if the ring is
-  *         full (which increments blocks_dropped and is recorded as a gap).
+  * @brief  Reserve `need` contiguous payload bytes in the current block.
+  *
+  *         If the block has less room than that, it is committed early
+  *         (flagged SDAT_F_PARTIAL) and the next one is started, so a read is
+  *         never dropped merely because it straddles a block boundary. That
+  *         mattered: with the watermark policy of sheppard_config.h every ODR
+  *         happens to divide the 4000-byte payload evenly today, so the old
+  *         drop-on-straddle behaviour never fired -- but changing
+  *         SHEPPARD_WM_TARGET_MS would have produced a silent periodic gap,
+  *         and at ODR 25 that is the configuration the paper rests on.
+  *
+  * @retval pointer to `need` writable bytes, or NULL only if the ring itself
+  *         is full, which increments blocks_dropped and is a real gap.
   */
-uint8_t *storage_fill_ptr(uint16_t *space_bytes);
+uint8_t *storage_fill_ptr(uint16_t need);
 
 /**
   * @brief  Advance the current block by `bytes` of payload just written.

@@ -141,14 +141,14 @@ static int build(uint8_t *dst, const record_cfg_t *c, const char *run_id,
     "\"run_id\":\"%s\",\"label\":\"%s\",\"rtc_start\":\"%s\",\n"
     "\"board\":{\"uid\":\"%08lX%08lX%08lX\",\"mcu\":\"STM32F723ZET6\"},\n"
     "\"fw\":{\"name\":\"%s\",\"version\":\"%s\",\"tag\":\"%s\","
-      "\"built\":\"%s %s\",\"opt\":\"-O0\"},\n"
+      "\"built\":\"%s %s\",\"opt\":\"%s\"},\n"
     "\"clock\":{\"sysclk_hz\":%lu,\"hse\":\"24MHz bypass\","
       "\"tim2_hz\":1000000},\n",
     SDAT_FORMAT_VERSION, run_id, c->label ? c->label : "", when,
     (unsigned long)board_uid_word(0), (unsigned long)board_uid_word(1),
     (unsigned long)board_uid_word(2),
     SHEPPARD_FW_NAME, SHEPPARD_FW_VERSION_STR, SHEPPARD_BUILD_TAG,
-    __DATE__, __TIME__,
+    __DATE__, __TIME__, SHEPPARD_OPT_LEVEL,
     (unsigned long)HAL_RCC_GetSysClockFreq());
 
   n += snprintf(p + n, (size_t)(cap - n),

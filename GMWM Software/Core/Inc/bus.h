@@ -121,8 +121,16 @@ void bus_clear_stats(bus_slot_t slot);
 /** Non-zero if this slot's transfers use DMA. */
 int bus_has_dma(bus_slot_t slot);
 
-/** Largest single transfer. Sized for a full FIFO watermark burst. */
-#define BUS_MAX_XFER  1040U
+/** Largest single transfer.
+ *
+ *  Sized to drain the ICM's entire 2 KiB FIFO in one burst, plus the leading
+ *  address byte. That matters: the sampler must be able to empty the FIFO
+ *  completely in a single read, because the threshold interrupt is PULSED and
+ *  fires only on the transition across the watermark. A read that leaves the
+ *  FIFO above threshold produces no further transition and the stream latches
+ *  until something notices -- which is exactly how the first two ODR 8000
+ *  attempts died. */
+#define BUS_MAX_XFER  2064U
 
 #ifdef __cplusplus
 }

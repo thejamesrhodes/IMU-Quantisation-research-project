@@ -38,11 +38,24 @@
 extern "C" {
 #endif
 
-/** Total shared block. Sized so that fwupdate's staging need (image size with
+/** Total shared block. Sized so that fwupdate's staging need (the image, with
     headroom) and storage's ring need (stall x rate) are both met, and so that
     everything else still fits in the 192 KiB region. Check the .map after
-    changing it; the link fails loudly with "region RAM overflowed". */
-#define ARENA_SIZE  (128U * 1024U)
+    changing it; the link fails loudly with "region RAM overflowed".
+
+    RAISED 128 -> 144 KiB, 28 Jul 2026. The image reached 131,268 bytes at
+    Stage B and the self-flasher refused it -- the staging buffer must exceed
+    the image it stages, so the limit grows with the firmware.
+
+    Must stay a multiple of SDAT_BLOCK_BYTES (4096): 144 KiB gives 36 ring
+    blocks, which at ODR 8000 is 900 ms of SD-stall absorption.
+
+    THE TREND IS THE PROBLEM, not this number. The image grows roughly a stage
+    at a time and the region is 192 KiB. The real answer is -O2, which would
+    roughly halve it -- but optimisation level is a science parameter (TN-16
+    open item 20: it affects SPI timing and must be recorded in every header),
+    so that is a deliberate, logged treatment change and not a convenience. */
+#define ARENA_SIZE  (144U * 1024U)
 
 /**
   * @brief  Claim the arena.

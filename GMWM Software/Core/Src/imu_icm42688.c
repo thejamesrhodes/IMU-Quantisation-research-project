@@ -287,10 +287,17 @@ int icm_fifo_read(bus_slot_t slot, uint8_t *dst, uint16_t bytes)
 
   /* FIFO_DATA streams: the address does not auto-increment, successive clocks
      return successive FIFO bytes. So one address byte then `bytes` reads.
-     The caller's buffer must be at least bytes+1 -- we hand the whole thing
-     to the SPI and shift the payload down afterwards. */
-  static uint8_t tx[BUS_MAX_XFER];
-  static uint8_t rx[BUS_MAX_XFER];
+
+     These scratch buffers are deliberately smaller than BUS_MAX_XFER. This
+     is the blocking, main-loop read used by `fifo` and `m1`; only the
+     interrupt-driven sampler needs to drain the whole FIFO at once, and
+     giving this path 2 KiB as well would cost 2 KiB of a 192 KiB region for
+     nothing. */
+  #define ICM_BLOCKING_READ_MAX  1040U
+  if ((uint32_t)bytes + 1U > ICM_BLOCKING_READ_MAX) { return BUS_E_ARG; }
+
+  static uint8_t tx[ICM_BLOCKING_READ_MAX];
+  static uint8_t rx[ICM_BLOCKING_READ_MAX];
 
   tx[0] = (uint8_t)(ICM_FIFO_DATA | 0x80U);
   memset(&tx[1], 0, bytes);
