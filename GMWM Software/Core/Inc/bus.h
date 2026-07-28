@@ -121,6 +121,16 @@ void bus_clear_stats(bus_slot_t slot);
 /** Non-zero if this slot's transfers use DMA. */
 int bus_has_dma(bus_slot_t slot);
 
+/**
+  * @brief  Actual SCK frequency for a slot, read back from CR1.
+  *
+  *         bus_init() forces every slot to SHEPPARD_SPI_HZ, because rule R8
+  *         controls bus activity as a confound and the specimen comparison is
+  *         only meaningful across identical buses. Read back rather than
+  *         assumed, and recorded in every record header.
+  */
+uint32_t bus_clock_hz(bus_slot_t slot);
+
 /** Largest single transfer.
  *
  *  Sized to drain the ICM's entire 2 KiB FIFO in one burst, plus the leading

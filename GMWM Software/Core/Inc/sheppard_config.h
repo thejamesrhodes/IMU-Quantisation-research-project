@@ -27,8 +27,8 @@ extern "C" {
 #define SHEPPARD_FW_NAME            "sheppard"
 #define SHEPPARD_FW_VERSION_MAJOR   0
 #define SHEPPARD_FW_VERSION_MINOR   2
-#define SHEPPARD_FW_VERSION_PATCH   10
-#define SHEPPARD_FW_VERSION_STR     "0.2.10"
+#define SHEPPARD_FW_VERSION_PATCH   12
+#define SHEPPARD_FW_VERSION_STR     "0.2.12"
 
 /* OPTIMISATION LEVEL IS A SCIENCE PARAMETER -- TN-16 open item 20.
  * Frozen at -Os from 28 July 2026, tag Stage-B-chained-dma-Os onwards. All
@@ -42,11 +42,21 @@ extern "C" {
 
 /* Free-text build tag. Change this when the build differs in any way that
    could touch the data, and log it in every record header. */
-#define SHEPPARD_BUILD_TAG          "Stage-B-xfer-Os"
+#define SHEPPARD_BUILD_TAG          "Stage-C-spi-matched-Os"
 
 /* Directory holding records on the card. One definition, used by both the
    writer and the download commands. */
 #define SHEPPARD_SD_DIR             "SHEPPARD"
+
+/* SPI SCK frequency, forced identically on every slot by bus_init().
+   THIS IS A SCIENCE PARAMETER. Rule R8 (TN-14 section 6) controls bus activity
+   as a confound, so the two specimens must be read over identical buses; before
+   28 July slot 2 ran at 16 MHz against slot 1's 8 MHz because SPI3 sits on APB1
+   with a different CubeMX prescaler, which would have written a bus-rate
+   difference straight into the specimen axis. The ICM-42688-P permits 24 MHz
+   (DS-000347 section 10.2); 8 MHz is chosen low to limit switching noise, in
+   the same spirit as the 32 MHz SYSCLK. */
+#define SHEPPARD_SPI_HZ             8000000UL
 
 /* ==========================================================================
  * Flash layout

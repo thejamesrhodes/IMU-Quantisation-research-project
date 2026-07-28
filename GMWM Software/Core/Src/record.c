@@ -162,13 +162,17 @@ static int build(uint8_t *dst, const record_cfg_t *c, const char *run_id,
     (unsigned long)HAL_RCC_GetSysClockFreq());
 
   n += snprintf(p + n, (size_t)(cap - n),
-    "\"sensor\":{\"part\":\"ICM-42688-P\",\"slot\":%d,"
+    /* spi_hz is read back from CR1, not assumed: rule R8 requires the two
+       specimens to be read over identical buses, and a header that merely
+       repeats the intended value could not detect a slot that was not. */
+    "\"sensor\":{\"part\":\"ICM-42688-P\",\"slot\":%d,\"spi_hz\":%lu,"
       "\"gyro_lsb_per_dps\":16.4,\"hires_lsb_per_dps\":131.0,"
       "\"delta_mdps\":61.035},\n"
     "\"config\":{\"odr_nominal_hz\":%ld,\"fsr_dps\":%u,\"word_bits\":20,"
       "\"ui_filt_bw\":%u,\"aaf\":\"%s\",\"tmst_res_us\":%u,"
       "\"fifo_watermark_bytes\":%u,\"offset_user_steps\":%d},\n",
-    (int)c->slot + 1, c->odr_hz, c->fsr_dps, c->ui_filt_bw,
+    (int)c->slot + 1, (unsigned long)bus_clock_hz(c->slot),
+    c->odr_hz, c->fsr_dps, c->ui_filt_bw,
     c->aaf_floor ? "42Hz_floor" : "585Hz_default",
     c->tmst_res_us, c->watermark, c->offset_user);
 

@@ -224,7 +224,26 @@ class Board:
 
         self._proto = queue.Queue()
         self._proto_on = threading.Event()
-        self._linebuf = ""
+
+        # Line assembly is done on BYTES, not on a decoded string.
+        #
+        # `get` announces itself with a text line and then sends raw payload
+        # with no framing, and both can land in a single serial read(). Decoding
+        # the chunk to str before splitting would run the payload through a
+        # utf-8 decoder, and the bytes could not be recovered afterwards. So the
+        # buffer stays as bytes and each completed line is decoded on its own.
+        self._rawbuf = b""
+
+        # Transfer capture. States: "idle" (normal console), "await" (armed,
+        # watching for the begin line), "capture" (consuming payload).
+        self._xfer_state = "idle"
+        self._xfer_buf = bytearray()
+        self._xfer_want = 0
+        self._xfer_name = None
+        self._xfer_err = None
+        self._xfer_lock = threading.Lock()
+        self.xfer_started = threading.Event()
+        self.xfer_done = threading.Event()
 
         self._thread = threading.Thread(target=self._io_loop, daemon=True)
         self._thread.start()
@@ -293,14 +312,99 @@ class Board:
                 self._feed(data)
 
     def _feed(self, data: bytes):
-        self.ui.put(("rx", data))
-        text = data.decode("utf-8", errors="replace")
-        self._linebuf += text.replace("\r\n", "\n").replace("\r", "\n")
-        while "\n" in self._linebuf:
-            line, self._linebuf = self._linebuf.split("\n", 1)
-            line = line.strip()
-            if line and self._proto_on.is_set():
-                self._proto.put(line)
+        while data:
+            if self._xfer_state == "capture":
+                data = self._xfer_take(data)
+                continue
+
+            self._rawbuf += data
+            data = b""
+            emit = bytearray()
+
+            while b"\n" in self._rawbuf:
+                raw, self._rawbuf = self._rawbuf.split(b"\n", 1)
+                emit += raw + b"\n"
+                line = raw.decode("utf-8", errors="replace").strip()
+                if line and self._proto_on.is_set():
+                    self._proto.put(line)
+
+                if self._xfer_state == "await" and line.startswith("xfer: begin "):
+                    self._begin_capture(line)
+                    if self._xfer_state == "capture":
+                        # Everything still in the buffer after the begin line is
+                        # payload, not text. Hand it straight to the capture and
+                        # go round again.
+                        data = bytes(self._rawbuf)
+                        self._rawbuf = b""
+                        break
+
+            if self._xfer_state == "idle":
+                # Normal console: show partial lines too, so prompts and
+                # progress that arrive without a newline are not held back.
+                self.ui.put(("rx", bytes(emit) + self._rawbuf))
+                self._rawbuf = b""
+            elif emit:
+                # Armed: only complete lines go to the display, because the
+                # bytes after the begin line are payload.
+                self.ui.put(("rx", bytes(emit)))
+
+    def _begin_capture(self, line: str):
+        parts = line.split()
+        try:
+            self._xfer_want = int(parts[2])
+            self._xfer_name = parts[3] if len(parts) > 3 else "?"
+        except (ValueError, IndexError):
+            self._xfer_err = f"malformed begin line: {line}"
+            self._xfer_state = "idle"
+            self.xfer_done.set()
+            return
+        with self._xfer_lock:
+            self._xfer_buf = bytearray()
+        self._xfer_state = "capture"
+        self.xfer_started.set()
+
+    def _xfer_take(self, data: bytes) -> bytes:
+        """Consume payload; return whatever is left over once it is complete."""
+        with self._xfer_lock:
+            need = self._xfer_want - len(self._xfer_buf)
+            self._xfer_buf += data[:need]
+            complete = len(self._xfer_buf) >= self._xfer_want
+        rest = data[need:] if len(data) > need else b""
+        if complete:
+            # Back to line mode so the trailing `xfer: end <crc>` is parsed
+            # normally -- it can arrive in the same chunk as the last payload.
+            self._xfer_state = "idle"
+            self.xfer_done.set()
+        return rest
+
+    # --- transfer control, called from a worker thread ---------------------
+
+    def xfer_arm(self):
+        self._xfer_state = "await"
+        self._xfer_want = 0
+        self._xfer_name = None
+        self._xfer_err = None
+        with self._xfer_lock:
+            self._xfer_buf = bytearray()
+        self.xfer_started.clear()
+        self.xfer_done.clear()
+
+    def xfer_cancel(self):
+        self._xfer_state = "idle"
+        self.xfer_started.clear()
+        self.xfer_done.clear()
+
+    def xfer_progress(self):
+        with self._xfer_lock:
+            return len(self._xfer_buf), self._xfer_want
+
+    def xfer_payload(self) -> bytes:
+        with self._xfer_lock:
+            return bytes(self._xfer_buf)
+
+    @property
+    def xfer_error(self):
+        return self._xfer_err
 
     def send_line(self, text: str) -> bool:
         return self.write_raw(text.encode() + b"\r\n")
@@ -580,12 +684,396 @@ def tag_for_line(line: str):
 # Application
 # ===========================================================================
 
+class DatasetWindow(tk.Toplevel):
+    """File manager for the records on the SD card.
+
+    A separate window rather than a tab, because the terminal pane owns the
+    main layout and the two jobs are genuinely separate: one is a live console,
+    the other is a transfer that must not have console traffic interleaved with
+    it. The Board reader thread switches to byte capture for the duration, so
+    nothing of the payload reaches the terminal widget -- which is what made
+    typing `get` by hand appear to hang the app.
+
+    Threading: the transfer runs on a worker; the window polls its own state
+    with after() rather than routing through the App's UI queue, so nothing in
+    the existing console path changes.
+    """
+
+    POLL_MS = 80
+
+    def __init__(self, app):
+        super().__init__(app.root)
+        self.app = app
+        self.board = app.board
+
+        self.title("Sheppard — datasets")
+        self.configure(bg=C_INK)
+        self.geometry("720x460")
+        self.minsize(560, 360)
+
+        self._lock = threading.Lock()
+        self._log_q = []
+        self._prog = (0, 0)
+        self._status = ""
+        self._busy = False
+        self._finished = False
+        self._files = []
+        self._worker = None
+
+        self.dest = app.cfg.get("dataset_dir") or os.path.join(
+            find_project_root() or os.getcwd(), "Test Datasets")
+
+        self._build()
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        self.after(self.POLL_MS, self._poll)
+        self.refresh()
+
+    # --- layout -----------------------------------------------------------
+
+    def _build(self):
+        head = tk.Frame(self, bg=C_PANEL)
+        head.pack(fill="x")
+
+        tk.Label(head, text="SD CARD", bg=C_PANEL, fg=C_DIM,
+                 font=(F_UI, 8, "bold")).pack(side="left", padx=(14, 8),
+                                              pady=9)
+        self.sum_var = tk.StringVar(value="")
+        tk.Label(head, textvariable=self.sum_var, bg=C_PANEL, fg=C_SIGNAL,
+                 font=(F_MONO, 9)).pack(side="left", pady=9)
+
+        bar = tk.Frame(self, bg=C_INK)
+        bar.pack(fill="x", padx=10, pady=(9, 4))
+        self.b_refresh = FlatButton(bar, "Refresh", self.refresh, small=True)
+        self.b_refresh.pack(side="left", padx=(0, 4))
+        self.b_get = FlatButton(bar, "Download selected",
+                                self.download_selected, accent=True, small=True)
+        self.b_get.pack(side="left", padx=4)
+        self.b_all = FlatButton(bar, "Download all new", self.download_new,
+                                small=True)
+        self.b_all.pack(side="left", padx=4)
+        self.b_del = FlatButton(bar, "Delete from card", self.delete_selected,
+                                small=True)
+        self.b_del.pack(side="left", padx=4)
+
+        lb = tk.Frame(self, bg=C_EDGE)
+        lb.pack(fill="both", expand=True, padx=10, pady=4)
+        self.list = tk.Listbox(lb, bg=C_TERM, fg=C_TEXT, bd=0,
+                               highlightthickness=0, selectmode="extended",
+                               font=(F_MONO, 9), activestyle="none",
+                               selectbackground=C_HILITE,
+                               selectforeground=C_TEXT)
+        self.list.pack(fill="both", expand=True, padx=1, pady=1)
+
+        foot = tk.Frame(self, bg=C_INK)
+        foot.pack(fill="x", padx=10, pady=(2, 4))
+        self.dest_var = tk.StringVar()
+        tk.Label(foot, textvariable=self.dest_var, bg=C_INK, fg=C_DIM,
+                 font=(F_MONO, 8), anchor="w").pack(side="left", fill="x",
+                                                    expand=True)
+        FlatButton(foot, "Change folder...", self._pick_dest,
+                   small=True).pack(side="right")
+        self._update_dest()
+
+        self.bar = StepBar(self, height=8)
+        self.bar.pack(fill="x", padx=10, pady=(2, 2))
+
+        self.stat_var = tk.StringVar(value="")
+        tk.Label(self, textvariable=self.stat_var, bg=C_INK, fg=C_DIM,
+                 font=(F_MONO, 8), anchor="w").pack(fill="x", padx=12,
+                                                    pady=(0, 8))
+
+    def _update_dest(self):
+        self.dest_var.set(f"→ {self.dest}")
+
+    def _pick_dest(self):
+        d = filedialog.askdirectory(initialdir=self.dest,
+                                    title="Where to save records")
+        if d:
+            self.dest = d
+            self.app.cfg["dataset_dir"] = d
+            save_settings(self.app.cfg)
+            self._update_dest()
+            self.refresh()
+
+    # --- worker plumbing --------------------------------------------------
+
+    def _log(self, text):
+        with self._lock:
+            self._log_q.append(text)
+
+    def _set(self, status=None, prog=None):
+        with self._lock:
+            if status is not None:
+                self._status = status
+            if prog is not None:
+                self._prog = prog
+
+    def _poll(self):
+        with self._lock:
+            msgs, self._log_q = self._log_q, []
+            status, (got, want) = self._status, self._prog
+            finished, self._finished = self._finished, False
+        for m in msgs:
+            self.app._note(m, "app")
+        self.stat_var.set(status)
+        self.bar.set(100.0 * got / want if want else 0.0)
+        if finished:
+            self._done()
+        self.after(self.POLL_MS, self._poll)
+
+    def _start(self, fn, *a):
+        if self._busy:
+            return
+        if not self.board.connected.is_set():
+            self.stat_var.set("board not connected")
+            return
+        self._busy = True
+        self.app._set_busy(True)
+        for b in (self.b_refresh, self.b_get, self.b_all, self.b_del):
+            b.set_enabled(False)
+        self._worker = threading.Thread(target=self._wrap, args=(fn,) + a,
+                                        daemon=True)
+        self._worker.start()
+
+    def _wrap(self, fn, *a):
+        try:
+            fn(*a)
+        except Exception as e:                             # noqa: BLE001
+            self._log(f"datasets: {type(e).__name__}: {e}")
+            self._set(status=f"failed: {e}")
+        finally:
+            self.board.proto_end()
+            self.board.xfer_cancel()
+            # Hand completion back to the main thread via the poll loop rather
+            # than calling after() from here. Tk is not thread-safe, and every
+            # widget touched by _done() belongs to the main thread.
+            with self._lock:
+                self._finished = True
+
+    def _done(self):
+        self._busy = False
+        self.app._set_busy(False)
+        for b in (self.b_refresh, self.b_get, self.b_all, self.b_del):
+            b.set_enabled(True)
+        self._render()
+
+    # --- listing ----------------------------------------------------------
+
+    def refresh(self):
+        self._start(self._ls_worker)
+
+    def _ls_worker(self):
+        self._set(status="listing...", prog=(0, 0))
+        self.board.proto_begin()
+        self.board.send_line("ls")
+        line, seen = self.board.expect(["ls: "], 15.0)
+        if line is None:
+            self._set(status="no reply to ls")
+            return
+
+        files = []
+        for s in seen:
+            parts = s.split()
+            if len(parts) >= 3 and parts[-1] == "kB" and not s.startswith("ls:"):
+                try:
+                    files.append((parts[0], int(parts[-2]) * 1024))
+                except ValueError:
+                    pass
+        with self._lock:
+            self._files = files
+        self._set(status=f"{len(files)} file(s) on card")
+
+    def _render(self):
+        with self._lock:
+            files = list(self._files)
+        self.list.delete(0, "end")
+        total = 0
+        for name, size in files:
+            total += size
+            here = os.path.join(self.dest, name)
+            mark = "✓" if os.path.exists(here) else " "
+            self.list.insert("end", f" {mark}  {name:<44} {_hsize(size):>10}")
+            if mark == "✓":
+                self.list.itemconfig("end", foreground=C_DIM)
+        self.sum_var.set(f"{len(files)} records, {_hsize(total)}   "
+                         f"(✓ = already downloaded)")
+
+    def _selected(self):
+        with self._lock:
+            files = list(self._files)
+        return [files[i] for i in self.list.curselection() if i < len(files)]
+
+    # --- download ---------------------------------------------------------
+
+    def download_selected(self):
+        sel = self._selected()
+        if not sel:
+            self.stat_var.set("nothing selected")
+            return
+        self._start(self._dl_worker, sel, True)
+
+    def download_new(self):
+        with self._lock:
+            files = list(self._files)
+        todo = [f for f in files
+                if not os.path.exists(os.path.join(self.dest, f[0]))]
+        if not todo:
+            self.stat_var.set("nothing new to download")
+            return
+        self._start(self._dl_worker, todo, False)
+
+    def _dl_worker(self, files, overwrite):
+        os.makedirs(self.dest, exist_ok=True)
+        for i, (name, _size) in enumerate(files, 1):
+            out = os.path.join(self.dest, name)
+            if os.path.exists(out) and not overwrite:
+                continue
+            self._set(status=f"[{i}/{len(files)}] {name}: starting")
+            ok, msg = self._pull_one(name, out)
+            self._log(f"datasets: {name}: {msg}")
+            self._set(status=f"[{i}/{len(files)}] {name}: {msg}")
+            if not ok:
+                return
+        self._set(status="done", prog=(1, 1))
+
+    def _pull_one(self, name, out):
+        board = self.board
+        board.proto_begin()
+        board.xfer_arm()
+        if not board.send_line(f"get {name}"):
+            return False, "write failed"
+
+        # Either capture starts, or the board refuses with a `get:` line.
+        deadline = time.time() + 30.0
+        while time.time() < deadline:
+            if board.xfer_started.is_set() or board.xfer_done.is_set():
+                break
+            line, _ = board.expect(["get:"], 0.25)
+            if line and not line.startswith("get: begin"):
+                return False, line
+        else:
+            return False, "timed out waiting for the transfer to start"
+
+        if board.xfer_error:
+            return False, board.xfer_error
+
+        t0 = time.time()
+        last_got, last_move = 0, time.time()
+        while not board.xfer_done.wait(0.1):
+            got, want = board.xfer_progress()
+            self._set(prog=(got, want),
+                      status=f"{name}  {_hsize(got)} / {_hsize(want)}  "
+                             f"{got / max(time.time() - t0, 1e-3) / 1024:.0f} kB/s")
+            if got != last_got:
+                last_got, last_move = got, time.time()
+            elif time.time() - last_move > 20.0:
+                return False, f"link went quiet after {got} of {want} bytes"
+
+        payload = board.xfer_payload()
+        got, want = board.xfer_progress()
+        self._set(prog=(got, want))
+
+        # The trailer carries the CRC the board accumulated over exactly the
+        # bytes it handed to the endpoint, so this checks card, FATFS, USB and
+        # host in one comparison. It is independent of the per-block CRCs
+        # inside the record, which only prove the blocks were correct when
+        # they were written.
+        line, _ = board.expect(["xfer: end"], 15.0)
+        if line is None:
+            return False, "no 'xfer: end' trailer"
+        try:
+            want_crc = int(line.split()[2], 16)
+        except (ValueError, IndexError):
+            return False, f"malformed trailer: {line}"
+
+        got_crc = zlib.crc32(payload) & 0xFFFFFFFF
+        if got_crc != want_crc:
+            return False, (f"CRC mismatch: board 0x{want_crc:08X}, "
+                           f"received 0x{got_crc:08X}")
+
+        tmp = out + ".part"
+        with open(tmp, "wb") as fh:
+            fh.write(payload)
+        os.replace(tmp, out)
+
+        el = time.time() - t0
+        msg = (f"{_hsize(len(payload))} in {el:.1f}s "
+               f"({len(payload) / el / 1024:.0f} kB/s), CRC ok")
+
+        extra = _verify_sdat(out)
+        if extra:
+            msg += " | " + extra
+        return True, msg
+
+    # --- delete -----------------------------------------------------------
+
+    def delete_selected(self):
+        sel = self._selected()
+        if not sel:
+            self.stat_var.set("nothing selected")
+            return
+        names = "\n".join(f"  {n}" for n, _ in sel[:12])
+        if len(sel) > 12:
+            names += f"\n  ... and {len(sel) - 12} more"
+        if not messagebox.askyesno(
+                "Delete from card",
+                f"Permanently delete {len(sel)} record(s) from the SD card?\n\n"
+                f"{names}\n\nThis cannot be undone. Records not yet downloaded "
+                f"will be lost.", parent=self):
+            return
+        self._start(self._rm_worker, sel)
+
+    def _rm_worker(self, files):
+        self.board.proto_begin()
+        for name, _ in files:
+            self.board.send_line(f"rm {name}")
+            line, _ = self.board.expect(["rm: "], 10.0)
+            self._log(f"datasets: {line or f'{name}: no reply'}")
+        self.board.proto_end()
+        self._ls_worker()
+
+    def _close(self):
+        if self._busy:
+            if not messagebox.askyesno("Transfer running",
+                                       "A transfer is in progress. Close "
+                                       "anyway?", parent=self):
+                return
+        self.app.datasets = None
+        self.destroy()
+
+
+def _hsize(n: float) -> str:
+    for unit in ("B", "kB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024.0
+    return f"{n:.0f} B"
+
+
+def _verify_sdat(path: str) -> str:
+    """Structural check of a downloaded record, if sdat.py is importable."""
+    if not path.lower().endswith(".sdat"):
+        return ""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import sdat
+        res = sdat.verify(path)
+    except Exception as e:                                 # noqa: BLE001
+        return f"sdat check unavailable ({type(e).__name__})"
+    if res.ok:
+        return (f"sdat PASS {res.n_blocks} blocks, {res.n_packets} samples, "
+                f"{res.f_board_hz:.3f} Hz")
+    first = res.problems[0] if res.problems else "?"
+    return f"sdat FAIL ({len(res.problems)}): {first}"
+
+
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.cfg = load_settings()
         self.ui = queue.Queue()
         self.board = Board(self.ui)
+        self.datasets = None            # the record browser, when open
 
         self.project = self.cfg.get("project") or find_project_root()
         if self.project and not os.path.isdir(self.project):
@@ -767,6 +1255,10 @@ class App:
         FlatButton(side, "Edit buttons...", self._edit_macros,
                    small=True).pack(fill="x", padx=12, pady=(6, 0))
 
+        self._section(side, "datasets")
+        FlatButton(side, "Records on card...", self._open_datasets,
+                   accent=True).pack(fill="x", padx=12, pady=2)
+
         self._section(side, "board")
         FlatButton(side, "Reset", lambda: self._send("reset"),
                    small=True).pack(fill="x", padx=12, pady=2)
@@ -790,6 +1282,18 @@ class App:
         tk.Label(foot, textvariable=self.peak_var, bg=C_PANEL, fg=C_FAINT,
                  font=(F_MONO, 7), anchor="e").pack(fill="x", padx=14,
                                                     pady=(2, 0))
+
+    def _open_datasets(self):
+        """Open the record browser, or raise it if it is already open."""
+        if getattr(self, "datasets", None) is not None:
+            try:
+                self.datasets.deiconify()
+                self.datasets.lift()
+                self.datasets.focus_force()
+                return
+            except tk.TclError:
+                self.datasets = None
+        self.datasets = DatasetWindow(self)
 
     def _rebuild_macros(self):
         for w in self.macro_frame.winfo_children():
@@ -1153,6 +1657,16 @@ class App:
             return
         if not self.board.connected.is_set():
             self._note("not connected", "bad")
+            return
+
+        # `get` sends raw binary with no framing. Typed here it would pour a
+        # whole record into the text widget, which is what made the window
+        # appear to hang. Route it to the browser, which puts the reader thread
+        # into byte-capture mode for the duration instead.
+        if cmd.split()[:1] == ["get"]:
+            self._note("`get` streams raw binary — opening the record browser "
+                       "instead", "app")
+            self._open_datasets()
             return
         if self.v_echo.get():
             self._flush_pending()
@@ -1521,6 +2035,12 @@ class App:
                     "An operation is in progress.\nQuitting now could leave "
                     "the board unbootable.\n\nQuit anyway?"):
                 return
+        if self.datasets is not None:
+            try:
+                self.datasets.destroy()
+            except tk.TclError:
+                pass
+            self.datasets = None
         if self.logfile:
             self.logfile.close()
         self.cfg.update(self._collect_settings())

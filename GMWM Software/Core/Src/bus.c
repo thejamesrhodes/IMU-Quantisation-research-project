@@ -117,14 +117,88 @@ static void finish(int slot, int status)
  * Public API
  * ========================================================================== */
 
+/* --------------------------------------------------------------------------
+ * SPI clock normalisation
+ *
+ * Rule R8 controls bus activity as a confound, and the specimen comparison is
+ * only meaningful if the two ICMs are read over identical buses. They were not:
+ * SPI1/4/5 sit on APB2 and SPI3 on APB1, both clocked at 32 MHz here because
+ * APB1CLKDivider is RCC_HCLK_DIV1, and CubeMX had SPI3 at /2 against /4 for the
+ * rest. Slot 2 therefore ran at 16 MHz against slot 1's 8 MHz, which would have
+ * built a bus-rate difference into the specimen axis. (TN-16 section 2 records
+ * APB1 as 16 MHz, which is also wrong -- worth correcting there.)
+ *
+ * Computed from the live peripheral clock rather than hard-coded, so a future
+ * change to the clock tree cannot silently reintroduce the mismatch. This lives
+ * here rather than in the .ioc because CubeMX regeneration has twice reverted
+ * settings in this project; bus.c is not generated.
+ * -------------------------------------------------------------------------- */
+
+static uint32_t presc_for(uint32_t pclk_hz, uint32_t target_hz, uint32_t *got)
+{
+  /* SPI_CR1_BR is a power-of-two divider, 2 to 256. Pick the smallest divider
+     whose result does not exceed the target, so every bus lands on exactly the
+     same frequency rather than merely close to it. */
+  static const uint32_t code[8] = {
+    SPI_BAUDRATEPRESCALER_2,   SPI_BAUDRATEPRESCALER_4,
+    SPI_BAUDRATEPRESCALER_8,   SPI_BAUDRATEPRESCALER_16,
+    SPI_BAUDRATEPRESCALER_32,  SPI_BAUDRATEPRESCALER_64,
+    SPI_BAUDRATEPRESCALER_128, SPI_BAUDRATEPRESCALER_256
+  };
+
+  for (int i = 0; i < 8; i++)
+  {
+    uint32_t f = pclk_hz >> (i + 1);
+    if (f <= target_hz)
+    {
+      if (got != NULL) { *got = f; }
+      return code[i];
+    }
+  }
+  if (got != NULL) { *got = pclk_hz >> 8; }
+  return code[7];
+}
+
+static int normalise_clock(SPI_HandleTypeDef *hspi, uint32_t *got)
+{
+  /* SPI2 and SPI3 hang off APB1; SPI1, SPI4, SPI5 and SPI6 off APB2. */
+  uint32_t pclk = ((hspi->Instance == SPI2) || (hspi->Instance == SPI3))
+                    ? HAL_RCC_GetPCLK1Freq()
+                    : HAL_RCC_GetPCLK2Freq();
+
+  uint32_t presc = presc_for(pclk, SHEPPARD_SPI_HZ, got);
+  if (hspi->Init.BaudRatePrescaler == presc)
+  {
+    return 0;                                   /* already correct */
+  }
+
+  hspi->Init.BaudRatePrescaler = presc;
+  return (HAL_SPI_Init(hspi) == HAL_OK) ? 1 : -1;
+}
+
 int bus_init(void)
 {
   for (int i = 0; i < (int)BUS_SLOT_COUNT; i++)
   {
     memset((void *)&s_st[i], 0, sizeof s_st[i]);
     cs_release(&s_cfg[i]);
+    (void)normalise_clock(s_cfg[i].hspi, NULL);
   }
   return BUS_OK;
+}
+
+uint32_t bus_clock_hz(bus_slot_t slot)
+{
+  if (!slot_valid(slot)) { return 0U; }
+
+  const SPI_HandleTypeDef *h = s_cfg[slot].hspi;
+  uint32_t pclk = ((h->Instance == SPI2) || (h->Instance == SPI3))
+                    ? HAL_RCC_GetPCLK1Freq()
+                    : HAL_RCC_GetPCLK2Freq();
+
+  /* BR field is bits 5:3 of CR1, encoding a shift of (BR + 1). */
+  uint32_t br = (h->Instance->CR1 >> 3) & 0x7U;
+  return pclk >> (br + 1U);
 }
 
 int bus_has_dma(bus_slot_t slot)

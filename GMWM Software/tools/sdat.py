@@ -148,7 +148,7 @@ class VerifyResult:
     fifo_peak: int = 0
     t_first_us: int = 0
     t_last_us: int = 0
-    first_block_packets: int = 0
+    last_block_packets: int = 0
 
     @property
     def ok(self) -> bool:
@@ -156,22 +156,31 @@ class VerifyResult:
 
     @property
     def f_board_hz(self) -> float:
-        """Sample rate against TIM2.
+        """Sample rate against the board's TIM2.
 
-        Block i is written from a read triggered at t_i carrying the k_i
-        packets that accumulated over (t_{i-1}, t_i].  The packets falling
-        strictly inside (t_1, t_M] therefore number N - k_1, and
+        A block's t_us is the trigger of the read that contributed its FIRST
+        packet, so the two anchors available here are t_1 (block 0) and t_j
+        (the last block).  With reads r_1..r_M delivering k_i packets that
+        accumulated over (t_{i-1}, t_i], the samples falling strictly inside
+        (t_1, t_j] are
 
-            f = (N - k_1) / (t_M - t_1)
+            sum_{i=2..j} k_i  =  (N - N_last)  -  k_1 + k_j
 
-        is unbiased.  Dividing the total count by the total elapsed time is
-        not: it charges the first block's packets to an interval they did not
-        occur in, which at short records and low ODR is a visible error.
+        where N_last is the packet count of the last block.  Reads never
+        straddle a block -- storage_fill_ptr commits early instead -- so the
+        last block holds exactly reads r_j..r_M and the identity is exact.
+        The residual k_j - k_1 is zero whenever the per-read packet count is
+        steady, which it is once the FIFO reaches its working point, and is
+        bounded by one watermark otherwise.
+
+        Subtracting the FIRST block's packets instead is wrong by a whole
+        block: at ODR 100 that read 91.98 Hz against a true 101.08 Hz.
         """
         span = self.t_last_us - self.t_first_us
-        if span <= 0 or self.n_packets <= self.first_block_packets:
+        n = self.n_packets - self.last_block_packets
+        if span <= 0 or n <= 0:
             return float("nan")
-        return (self.n_packets - self.first_block_packets) * 1e6 / span
+        return n * 1e6 / span
 
 
 def _parse_block_header(raw: bytes) -> BlockHeader:
@@ -293,8 +302,8 @@ def verify(path: str, check_crc: bool = True,
 
         if res.n_blocks == 1:
             res.t_first_us = bh.t_us
-            res.first_block_packets = bh.n_packets
         res.t_last_us = bh.t_us
+        res.last_block_packets = bh.n_packets
         res.n_packets += bh.n_packets
         res.flags_seen |= bh.flags
         res.fifo_peak = max(res.fifo_peak, bh.fifo_bytes)
@@ -303,6 +312,13 @@ def verify(path: str, check_crc: bool = True,
             res.problems.append(Problem(
                 idx, "aborted", f"stopped after {max_problems} problems"))
             break
+
+    # An empty record is not a passing record. It reports zero problems on
+    # every structural test precisely because there is nothing to test.
+    if res.n_blocks == 0:
+        res.problems.append(Problem(
+            -1, "empty", "no data blocks: the record was opened but never "
+                         "written to"))
 
     # Cross-check against what the firmware wrote into the header.
     timing = hdr.get("timing") or {}
@@ -600,11 +616,16 @@ def _synth(path: str, n_blocks: int = 3, last_packets: int = 37,
             payload[o + 15] = (tm >> 8) & 0xFF
             payload[o + 16] = tm & 0xFF
             sample += 1
-        t_us += n * step_us
+        # The anchor is the trigger of the read that STARTS the block, so it
+        # belongs at the block's leading edge. Stamping it at the trailing edge
+        # instead shifts every anchor by one block and the rate estimator --
+        # which relies on the anchors bracketing all but the last block --
+        # comes out high by the ratio of the record length to itself minus one.
         flags = F_PARTIAL if n < MAX_PACKETS else 0
         bh = _BLKHDR.pack(BLOCK_MAGIC, b, t_us, n, 1000, flags, 0, 0, 0,
                           zlib.crc32(bytes(payload)) & 0xFFFFFFFF)
         blob += bh + payload + b"\0" * (BLOCK_BYTES - BLKHDR_BYTES - PAYLOAD_BYTES)
+        t_us += n * step_us
 
     with open(path, "wb") as f:
         f.write(blob)
@@ -647,6 +668,9 @@ def cmd_selftest(args) -> int:
             check("TMST unwraps to a uniform step",
                   bool(np.all(d_tmst == d_tmst[0])),
                   f"steps seen: {np.unique(d_tmst)[:5]}")
+            # 3 blocks of 200/200/37 at a 1 ms step: the anchors are 200 ms
+            # apart per full block, so the last block's 37 packets must be
+            # excluded from the numerator, not the first block's 200.
             check("measured rate matches the synthetic ODR",
                   abs(rec.verify.f_board_hz - 1000.0) < 1.0,
                   _fmt_hz(rec.verify.f_board_hz))
