@@ -30,9 +30,13 @@ static const uint32_t s_crc_nib[16] = {
   0x9B64C2B0UL, 0x86D3D2D4UL, 0xA00AE278UL, 0xBDBDF21CUL
 };
 
-uint32_t record_crc32(const uint8_t *p, uint32_t n)
+uint32_t record_crc32_update(uint32_t crc, const uint8_t *p, uint32_t n)
 {
-  uint32_t crc = 0xFFFFFFFFUL;
+  /* Same convention as zlib.crc32(data, prev): the running value is the
+     finalised CRC of everything so far, so the caller starts at 0 and can use
+     the intermediate value directly. The inversion at both ends undoes and
+     redoes the final XOR. */
+  crc = ~crc;
   while (n--)
   {
     crc ^= *p++;
@@ -40,6 +44,11 @@ uint32_t record_crc32(const uint8_t *p, uint32_t n)
     crc = (crc >> 4) ^ s_crc_nib[crc & 0x0FU];
   }
   return ~crc;
+}
+
+uint32_t record_crc32(const uint8_t *p, uint32_t n)
+{
+  return record_crc32_update(0UL, p, n);
 }
 
 /* ==========================================================================

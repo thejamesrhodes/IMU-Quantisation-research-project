@@ -229,6 +229,8 @@ int storage_task(void)
  * Open / close
  * ========================================================================== */
 
+int storage_is_mounted(void) { return (int)s_mounted; }
+
 int storage_mount(void)
 {
   if (s_mounted) { return 0; }
@@ -277,8 +279,8 @@ int storage_open(const record_cfg_t *cfg, const char *run_id)
 
   /* Flat directory, sortable, descriptive. exFAT with LFN is already
      confirmed working (TN-16 section 6.3), so long names are free. */
-  (void)f_mkdir("SHEPPARD");
-  snprintf(s_path, sizeof s_path, "SHEPPARD/%s_%s_%ldHz.sdat",
+  (void)f_mkdir(SHEPPARD_SD_DIR);
+  snprintf(s_path, sizeof s_path, SHEPPARD_SD_DIR "/%s_%s_%ldHz.sdat",
            s_runid, cfg->label ? cfg->label : "rec", cfg->odr_hz);
 
   FRESULT fr = f_open(&s_fil, s_path, FA_CREATE_ALWAYS | FA_WRITE);
@@ -568,9 +570,10 @@ static void cmd_rec(int argc, char **argv)
                  (unsigned long)ss.reads_started, (unsigned long)ss.ring_full,
                  (unsigned long)ss.bus_busy, (unsigned long)ss.faults,
                  (unsigned long)ss.watchdog_kicks);
-  console_printf("  chained drains %lu, start-err %lu, chain-stuck %lu\r\n",
+  console_printf("  chained drains %lu, start-err %lu, chain-stuck %lu, "
+                 "retries %lu\r\n",
                  (unsigned long)ss.chained, (unsigned long)ss.start_err,
-                 (unsigned long)ss.chain_stuck);
+                 (unsigned long)ss.chain_stuck, (unsigned long)ss.retries);
   console_printf("  fifo peak %u B, overflows %lu\r\n",
                  (unsigned)ss.fifo_peak, (unsigned long)ss.overflows);
   uint32_t got      = storage_sample_count();

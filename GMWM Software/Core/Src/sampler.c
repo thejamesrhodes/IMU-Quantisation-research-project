@@ -54,6 +54,9 @@ static uint8_t  *volatile s_step_dst;
 static volatile uint16_t  s_step_len;
 
 static volatile uint64_t  s_chain_start_us;  /* liveness timeout reference  */
+static volatile uint8_t   s_retries;         /* consecutive chain retries   */
+
+#define SAMPLER_MAX_RETRIES 3U
 
 /* The ICM FIFO is 2048 bytes; in 20-byte packet mode it holds 102 packets, so
    2040 B is full. A count read returning at or near that means the FIFO
@@ -127,6 +130,27 @@ static inline void pend_step(uint8_t step)
    returns BUS_E_FAULT it has already run the completion callback with a fault
    status, which does its own accounting -- adding it again here is what turned
    one lost read into the phantom "20 packets" in the 28 July regression. */
+/* Ends a chain that could not complete.
+ *
+ * A fault leaves the FIFO above the watermark, and because INT1 is pulsed no
+ * further pulse will come -- the stream is latched from that moment. At ODR
+ * 8000 the FIFO overflows 6.5 ms later, which is shorter than any watchdog
+ * period that does not also false-trigger on the 6.25 ms normal interval. The
+ * two requirements are irreconcilable in a time-based watchdog, so recovery is
+ * event-driven instead: retry immediately from PendSV. The retry budget is
+ * bounded so a hard fault degrades to the watchdog rather than spinning. */
+static void chain_abort(void)
+{
+  if (s_retries < SAMPLER_MAX_RETRIES)
+  {
+    s_retries++;
+    s_st.retries++;
+    pend_step(STEP_COUNT);
+    return;
+  }
+  s_chain = 0U;
+}
+
 static void account_start_failure(int rc, uint32_t pkts_lost)
 {
   if (rc == BUS_E_BUSY)
@@ -149,7 +173,7 @@ static void account_start_failure(int rc, uint32_t pkts_lost)
   if (rc != BUS_E_FAULT)
   {
     s_lost_packets += pkts_lost;
-    s_chain = 0U;
+    chain_abort();
   }
 }
 
@@ -162,16 +186,17 @@ static void on_data(bus_slot_t slot, int status, void *ctx)
   {
     s_st.faults++;
     s_lost_packets += s_pending_pkts;
-    s_chain = 0U;
     /* A faulted transfer's contents are undefined and must not enter the
        archive. Recorded as a gap, which is the honest representation of a
        sample the hardware could not fetch. */
+    chain_abort();
     return;
   }
 
   uint16_t n = (uint16_t)(s_pending_pkts * ICM_PACKET4_LEN);
   memcpy(dst, &s_scratch[1], n);
   s_st.reads_done++;
+  s_retries = 0U;                       /* progress: reset the retry budget */
 
   storage_advance(n, s_t_pending, s_avail, 0U);
 
@@ -192,7 +217,7 @@ static void on_count(bus_slot_t slot, int status, void *ctx)
 {
   (void)slot; (void)ctx;
 
-  if (status != BUS_OK) { s_st.faults++; s_chain = 0U; return; }
+  if (status != BUS_OK) { s_st.faults++; chain_abort(); return; }
 
   s_avail = (uint16_t)(((uint16_t)s_cnt[1] << 8) | s_cnt[2]);
   if (s_avail > s_st.fifo_peak) { s_st.fifo_peak = s_avail; }
@@ -208,10 +233,10 @@ static void on_count(bus_slot_t slot, int status, void *ctx)
      arrive, so a pulse IS coming and the chain can stop here. At or above it,
      no transition occurs and no pulse will come, so the chain must continue or
      the stream latches. This test is the one that keeps the drain alive. */
-  if (s_avail < s_wm) { s_chain = 0U; return; }
+  if (s_avail < s_wm) { s_retries = 0U; s_chain = 0U; return; }
 
   uint32_t pkts = s_avail / ICM_PACKET4_LEN;
-  if (pkts == 0U) { s_chain = 0U; return; }
+  if (pkts == 0U) { s_retries = 0U; s_chain = 0U; return; }
 
   /* Cap by the transfer ceiling and by what fits in one ring block. */
   const uint32_t max_by_xfer = (BUS_MAX_XFER - 1U) / ICM_PACKET4_LEN;
@@ -411,6 +436,7 @@ int sampler_start(bus_slot_t slot, uint16_t watermark_bytes, long odr_hz)
   s_lost_packets = 0U;
   s_chain          = 0U;
   s_step           = STEP_NONE;
+  s_retries        = 0U;
   s_last_int_us    = timebase_now_us();
   s_chain_start_us = s_last_int_us;
 
@@ -434,17 +460,21 @@ int sampler_start(bus_slot_t slot, uint16_t watermark_bytes, long odr_hz)
     if (pkts == 0U) { pkts = 1U; }
     uint32_t interval_us = (uint32_t)((pkts * 1000000ULL) / (uint32_t)odr_hz);
 
+    /* Deliberately generous, because recovery no longer depends on it: a chain
+       that aborts retries itself from PendSV within microseconds (chain_abort
+       below), so the watchdog is a second-line backstop rather than the primary
+       revival path.
+
+       The previous clamp tied the period to half the FIFO fill time, which at
+       ODR 8000 gave 6.4 ms against a 6.25 ms interrupt interval -- a margin of
+       2%. Any jitter tripped it, and a slow patch on the SD card produced 3157
+       kicks in 60 s. They cost no data, but each is an unscheduled 3-byte SPI
+       transaction whose rate tracked the card's mood, and rule R8 exists
+       precisely to keep bus activity from varying with anything other than the
+       experimental condition. At ODR 8000 this is now 25 ms against a 6.6 ms
+       worst observed interval. */
     s_watchdog_us = 4U * interval_us;
-
-    /* Never let the watchdog period approach the time the FIFO takes to fill
-       from empty, or a missed pulse becomes an overflow before the watchdog
-       notices. At ODR 8000 the 2048-byte FIFO fills in 12.8 ms, so the old
-       20 ms floor guaranteed data loss on every missed service. */
-    uint32_t fill_us = (uint32_t)((ICM_FIFO_BYTES * 1000000ULL)
-                                  / ((uint64_t)odr_hz * ICM_PACKET4_LEN));
-    if (s_watchdog_us > (fill_us / 2U)) { s_watchdog_us = fill_us / 2U; }
-
-    if (s_watchdog_us < 2000U)    { s_watchdog_us = 2000U; }     /* 2 ms   */
+    if (s_watchdog_us < 5000U)    { s_watchdog_us = 5000U; }     /* 5 ms   */
     if (s_watchdog_us > 2000000U) { s_watchdog_us = 2000000U; }  /* 2 s    */
   }
 

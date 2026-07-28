@@ -70,6 +70,16 @@ int console_register(const console_cmd_t *cmds, uint8_t count);
 int console_write(const void *buf, uint16_t len);
 
 /**
+  * @brief  Write raw bytes to the CDC sink ONLY, bypassing the UART mirror.
+  *
+  *         For bulk payloads. console_write() fans out to every enabled sink,
+  *         and mirroring a 13 MB record to a 115200 baud UART would both take
+  *         twenty minutes and pace the USB transfer at 11 kB/s.
+  * @retval 0 if CDC accepted the data, -1 otherwise.
+  */
+int console_write_cdc(const void *buf, uint16_t len);
+
+/**
   * @brief  Formatted output. Truncates at SHEPPARD_CONSOLE_TX_MAX.
   */
 void console_printf(const char *fmt, ...);

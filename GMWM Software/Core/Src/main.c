@@ -48,6 +48,7 @@
 void icm_console_init(void);
 void validate_console_init(void);
 void storage_console_init(void);
+void xfer_console_init(void);
 void sampler_on_int(uint16_t gpio_pin);   /* sampler.h; declared to avoid
                                              pulling in bus.h/record.h here */
 #include <stdarg.h>
@@ -396,6 +397,10 @@ int main(void)
   icm_console_init();
   validate_console_init();
   storage_console_init();
+
+  /* Registers `ls`, `get` and `rm`. The board has no removable card reader, so
+     this is the only route from the instrument to analysis. */
+  xfer_console_init();
 
   HAL_Delay(500);
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_RESET);

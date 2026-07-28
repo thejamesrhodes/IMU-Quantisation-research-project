@@ -101,6 +101,20 @@ static int cdc_put(const uint8_t *buf, uint16_t len)
 }
 #endif
 
+int console_write_cdc(const void *buf, uint16_t len)
+{
+  if ((buf == NULL) || (len == 0U))
+  {
+    return 0;
+  }
+
+#if SHEPPARD_CONSOLE_CDC
+  return cdc_put((const uint8_t *)buf, len);
+#else
+  return -1;
+#endif
+}
+
 int console_write(const void *buf, uint16_t len)
 {
   int ok = -1;

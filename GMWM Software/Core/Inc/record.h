@@ -130,6 +130,9 @@ int record_finalise_header(uint8_t *dst, const record_cfg_t *cfg,
 /** zlib/IEEE CRC-32. Shared so the host reader and the firmware agree. */
 uint32_t record_crc32(const uint8_t *p, uint32_t n);
 
+/** Running form, matching zlib.crc32(data, prev). Start with crc = 0. */
+uint32_t record_crc32_update(uint32_t crc, const uint8_t *p, uint32_t n);
+
 #ifdef __cplusplus
 }
 #endif

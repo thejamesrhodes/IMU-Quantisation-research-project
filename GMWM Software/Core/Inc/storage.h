@@ -77,6 +77,10 @@ int storage_close(uint32_t n_gaps, uint64_t ts_first_us, uint64_t ts_last_us,
                   int32_t t_start_mc, int32_t t_end_mc);
 
 int  storage_is_open(void);
+
+/** Non-zero once the card is mounted. Lets a caller mount lazily instead of
+    failing with a confusing FR_NOT_ENABLED. */
+int  storage_is_mounted(void);
 void storage_get_stats(storage_stats_t *out);
 const char *storage_filename(void);
 

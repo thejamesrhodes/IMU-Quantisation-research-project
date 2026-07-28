@@ -27,8 +27,8 @@ extern "C" {
 #define SHEPPARD_FW_NAME            "sheppard"
 #define SHEPPARD_FW_VERSION_MAJOR   0
 #define SHEPPARD_FW_VERSION_MINOR   2
-#define SHEPPARD_FW_VERSION_PATCH   9
-#define SHEPPARD_FW_VERSION_STR     "0.2.9"
+#define SHEPPARD_FW_VERSION_PATCH   10
+#define SHEPPARD_FW_VERSION_STR     "0.2.10"
 
 /* OPTIMISATION LEVEL IS A SCIENCE PARAMETER -- TN-16 open item 20.
  * Frozen at -Os from 28 July 2026, tag Stage-B-chained-dma-Os onwards. All
@@ -42,7 +42,11 @@ extern "C" {
 
 /* Free-text build tag. Change this when the build differs in any way that
    could touch the data, and log it in every record header. */
-#define SHEPPARD_BUILD_TAG          "Stage-B-fmeas-Os"
+#define SHEPPARD_BUILD_TAG          "Stage-B-xfer-Os"
+
+/* Directory holding records on the card. One definition, used by both the
+   writer and the download commands. */
+#define SHEPPARD_SD_DIR             "SHEPPARD"
 
 /* ==========================================================================
  * Flash layout

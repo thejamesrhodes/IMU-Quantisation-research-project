@@ -69,6 +69,7 @@ typedef struct {
   uint32_t chained;         /* extra count reads issued after a data read   */
   uint32_t overflows;       /* count reads that found the FIFO at capacity  */
   uint32_t chain_stuck;     /* chains abandoned by the liveness timeout     */
+  uint32_t retries;         /* immediate re-kicks after an aborted chain    */
   uint16_t fifo_peak;       /* highest FIFO_COUNT seen, bytes               */
 } sampler_stats_t;
 
