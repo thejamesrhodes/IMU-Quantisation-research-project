@@ -62,11 +62,13 @@
   */
 
 /*---------- -----------*/
-/* REGENERATION HAZARD: CubeMX writes 1U here. usbd_ctlreq.c gates every
-   interface-recipient request on `LOBYTE(wIndex) <= USBD_MAX_NUM_INTERFACES`,
-   so this must cover the highest interface number the descriptor declares:
-   2 for CDC comm + CDC data, 3 if SHEPPARD_USB_DFU_RUNTIME is turned back on.
-   Restore it after any regeneration -- see the checklist in TN-17. */
+/* REGENERATION HAZARD -- reverted to 1U by CubeMX twice on 27 Jul 2026.
+   usbd_ctlreq.c gates every interface-recipient request on
+   `LOBYTE(wIndex) <= USBD_MAX_NUM_INTERFACES`, so this must cover the highest
+   interface number the descriptor declares: 2 for CDC comm + CDC data.
+   With 1U the device enumerates but the data interface is unreachable --
+   the COM port opens and carries nothing.
+   First item on the TN-17A section 8 checklist. */
 #define USBD_MAX_NUM_INTERFACES     2U
 /*---------- -----------*/
 #define USBD_MAX_NUM_CONFIGURATION     1U

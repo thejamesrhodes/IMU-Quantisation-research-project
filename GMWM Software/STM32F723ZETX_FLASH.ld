@@ -38,14 +38,47 @@ ENTRY(Reset_Handler)
 /* Highest address of the user mode stack */
 _estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
 
-_Min_Heap_Size = 0x200; /* required amount of heap */
-_Min_Stack_Size = 0x400; /* required amount of stack */
+_Min_Heap_Size = 0x200;  /* required amount of heap  */
+_Min_Stack_Size = 0x1000; /* required amount of stack */
+/* Stack raised 0x400 -> 0x1000 (TN-16 open item 19). The console, the
+   self-flasher and the coming logger all add call depth, and 1 KiB was
+   already uncomfortable next to vsnprintf.
 
-/* Memories definition */
+   REGENERATION HAZARD: CubeIDE rewrote this line back to 0x400 on 27 Jul 2026
+   while leaving the MEMORY block and the .dtcm section intact. It templates
+   the two size lines but not the rest of the script, so check this value
+   after every regeneration. Added to the TN-17A section 8 checklist. */
+
+/* Memories definition
+ *
+ * SPLIT FROM A SINGLE FLAT REGION, 27 July 2026. CubeMX generates one 256 KiB
+ * block at 0x20000000, which silently places every .data and .bss object in
+ * DTCM. Two problems follow, and both are fixed by declaring the split:
+ *
+ *   1. DMA. On STM32F7 the DTCM is reachable by DMA only through the CPU's
+ *      AHB-slave port, and it is a well-documented source of intermittent
+ *      failures. Standard practice is to keep DMA buffers in SRAM1. With one
+ *      flat region a DMA buffer lands in DTCM by accident; with the split it
+ *      cannot.
+ *
+ *   2. Execution. .RamFunc rides inside .data, so the self-flasher's
+ *      erase-and-program routine was executing from DTCM. That worked, but on
+ *      an inference rather than a fact (TN-17 section 3.2). It now runs from
+ *      SRAM1, where the question does not arise.
+ *
+ * Layout on the STM32F723ZE:
+ *   DTCM   0x20000000  64 KiB   tightly coupled, fastest, NOT DMA-friendly
+ *   SRAM1  0x20010000 176 KiB \ contiguous, on the AHB matrix, DMA-safe
+ *   SRAM2  0x2003C000  16 KiB /
+ *
+ * DTCM is declared but nothing is placed in it yet. Put latency-critical data
+ * the DMA never touches there later; see the .dtcm section below.
+ */
 MEMORY
 {
-  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 256K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 512K
+  DTCM   (xrw)    : ORIGIN = 0x20000000,   LENGTH = 64K
+  RAM    (xrw)    : ORIGIN = 0x20010000,   LENGTH = 192K
+  FLASH   (rx)    : ORIGIN = 0x08000000,   LENGTH = 512K
 }
 
 /* Sections */
@@ -175,6 +208,21 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
+
+  /* Tightly-coupled data memory. Nothing is placed here yet; the section
+     exists so that later work can opt in with
+         __attribute__((section(".dtcm")))
+     for latency-critical data that DMA never touches. NOLOAD because DTCM
+     contents are not initialised from flash. */
+  .dtcm (NOLOAD) :
+  {
+    . = ALIGN(8);
+    _sdtcm = .;
+    *(.dtcm)
+    *(.dtcm*)
+    . = ALIGN(8);
+    _edtcm = .;
+  } >DTCM
 
   /* Remove information from the compiler libraries */
   /DISCARD/ :

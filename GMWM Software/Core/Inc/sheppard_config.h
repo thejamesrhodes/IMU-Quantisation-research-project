@@ -26,13 +26,13 @@ extern "C" {
 
 #define SHEPPARD_FW_NAME            "sheppard"
 #define SHEPPARD_FW_VERSION_MAJOR   0
-#define SHEPPARD_FW_VERSION_MINOR   1
+#define SHEPPARD_FW_VERSION_MINOR   2
 #define SHEPPARD_FW_VERSION_PATCH   2
-#define SHEPPARD_FW_VERSION_STR     "0.1.2"
+#define SHEPPARD_FW_VERSION_STR     "0.2.2"
 
 /* Free-text build tag. Change this when the build differs in any way that
    could touch the data, and log it in every record header. */
-#define SHEPPARD_BUILD_TAG          "usb-test-2"
+#define SHEPPARD_BUILD_TAG          "Stage B"
 
 /* ==========================================================================
  * Flash layout
@@ -156,10 +156,18 @@ extern "C" {
 
 /* Staging buffer, in .bss. Must exceed the largest image you will flash.
    If the link fails with "region RAM overflowed", reduce this. The `fw`
-   command reports the limit and refuses anything larger. 256 KiB of SRAM is
-   contiguous at 0x20000000 on this part, and the rest of the firmware uses
-   well under 20 KiB of it. */
-#define SHEPPARD_FW_STAGE_SIZE          (160U * 1024U)
+   command reports the limit and refuses anything larger.
+
+   REDUCED 160 -> 128 KiB on 27 Jul 2026. The linker split moved .bss out of
+   DTCM into the 192 KiB SRAM1+SRAM2 region, so the budget is 192 KiB rather
+   than 256 KiB. At a ~73 KiB image, 128 KiB is still 1.75x headroom.
+
+   This is an interim measure. The real fix is a single shared arena: the
+   staging buffer and the sampler's DMA ring are never in use at the same
+   time -- you do not flash mid-record -- so they should overlay each other
+   with a runtime guard. Due in Stage B, once the SD stall measurement fixes
+   the ring size (TN-18 section 5, TN-16 open item 7). */
+#define SHEPPARD_FW_STAGE_SIZE          (128U * 1024U)
 
 /* Smallest plausible image. Guards against a typo'd size erasing the part. */
 #define SHEPPARD_FW_MIN_SIZE            (2U * 1024U)

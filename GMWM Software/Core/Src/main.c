@@ -29,6 +29,24 @@
 #include "console.h"
 #include "boot_ctrl.h"
 #include "fwupdate.h"
+#include "timebase.h"
+#include "bus.h"
+
+/* imu_icm42688.h is deliberately NOT included here.
+ *
+ * main.c still carries the bring-up ICM code -- its own ICM_* register
+ * defines and a static icm_write8() -- which collides with the driver's
+ * header on about twenty macros and one function name. That collision is a
+ * symptom, not a problem to paper over: main.c should not own ICM register
+ * knowledge at all, and the module split (TN-18, refactor task) deletes the
+ * legacy block entirely.
+ *
+ * Until then main.c needs exactly one symbol from the driver, so it declares
+ * that one rather than dragging in a header it conflicts with. Remove this
+ * line and add the include once the legacy block is gone.
+ */
+void icm_console_init(void);
+void validate_console_init(void);
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -156,6 +174,12 @@ SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi3;
 SPI_HandleTypeDef hspi4;
 SPI_HandleTypeDef hspi5;
+DMA_HandleTypeDef hdma_spi1_rx;
+DMA_HandleTypeDef hdma_spi1_tx;
+DMA_HandleTypeDef hdma_spi3_rx;
+DMA_HandleTypeDef hdma_spi3_tx;
+
+TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart1;
@@ -185,6 +209,7 @@ static void cmd_sd(int argc, char **argv);
 static void cmd_burst(int argc, char **argv);
 static void cmd_time(int argc, char **argv);
 static void cmd_rate(int argc, char **argv);
+static void cmd_tick(int argc, char **argv);
 
 /* Non-blocking data-ready rate measurement. Started by `rate`, completed by
    rate_task() in the main loop. */
@@ -195,6 +220,7 @@ static uint8_t  g_rate_active = 0;
 
 static const console_cmd_t g_main_cmds[] = {
   { "scan",  "identify all four buses and dump one sample", cmd_scan  },
+  { "tick",  "tick [s] - check the 1 us timebase against SysTick", cmd_tick },
   { "rate",  "rate [s|stop] - measure true ODR, runs in the background", cmd_rate },
   { "sd",    "mount the card and run the FS self-test", cmd_sd    },
   { "burst", "burst <n> - CDC throughput test, n x 512 B", cmd_burst },
@@ -206,6 +232,7 @@ static const console_cmd_t g_main_cmds[] = {
 void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_SPI3_Init(void);
 static void MX_SPI4_Init(void);
@@ -216,6 +243,7 @@ static void MX_I2C1_Init(void);
 static void MX_SDMMC2_SD_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_RTC_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 
@@ -321,29 +349,21 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-
-
-
   MX_GPIO_Init();
-  HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+  MX_DMA_Init();
   MX_SPI1_Init();
   MX_SPI3_Init();
   MX_SPI4_Init();
   MX_SPI5_Init();
-  HAL_GPIO_TogglePin(LED_2_GPIO_Port, LED_2_Pin);
   MX_USB_DEVICE_Init();
   MX_UART4_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
-  HAL_GPIO_TogglePin(LED_3_GPIO_Port, LED_3_Pin);
   MX_SDMMC2_SD_Init();
   MX_USART1_UART_Init();
   MX_RTC_Init();
   MX_FATFS_Init();
-  HAL_GPIO_TogglePin(LED_4_GPIO_Port, LED_4_Pin);
-
-
-
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
   /* Console first: everything below logs through it. Output goes to CDC when
@@ -357,6 +377,21 @@ int main(void)
 
   /* Registers the `fw` command. Must follow console_init(). */
   fw_init();
+
+  /* 1 us timebase. Must follow MX_TIM2_Init(). Every sample timestamp and
+     every f_measured figure comes from here. */
+  if (timebase_init() != 0) {
+    console_printf("timebase: TIM2 failed to start\r\n");
+  }
+
+  /* SPI transport. Must follow the MX_SPIx_Init() calls and MX_DMA_Init().
+     Deasserts every chip select, which the legacy code below also does --
+     harmless duplication until the old helpers are retired. */
+  bus_init();
+
+  /* Registers the `icm` and `fifo` commands, and `m1`. */
+  icm_console_init();
+  validate_console_init();
 
   HAL_Delay(500);
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_RESET);
@@ -457,7 +492,7 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
@@ -534,7 +569,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x00303D5B;
+  hi2c1.Init.Timing = 0x00707CBB;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -790,6 +825,51 @@ static void MX_SPI5_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 31;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief UART4 Initialization Function
   * @param None
   * @retval None
@@ -856,6 +936,32 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
+  /* DMA1_Stream5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
+  /* DMA2_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+  /* DMA2_Stream3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
 
 }
 
@@ -1638,6 +1744,42 @@ static void cmd_rate(int argc, char **argv)
 
   console_printf("rate: counting for %lu ms, results will follow\r\n",
                  (unsigned long)window);
+}
+
+/* Cross-checks TIM2 against SysTick. They are the same crystal via different
+   dividers, so agreement proves the prescaler and the 64-bit extension, not
+   the oscillator -- the true HSE tolerance still has to go in the systematics
+   budget (TN-16 SS10.1). Disagreement of a few percent means the prescaler is
+   wrong; a jump of ~4.29e9 us means the wrap handling is wrong. */
+static void cmd_tick(int argc, char **argv)
+{
+  uint32_t secs = 2;
+  if (argc >= 2) {
+    long s = strtol(argv[1], NULL, 10);
+    if (s >= 1 && s <= 600L) secs = (uint32_t)s;
+  }
+
+  uint64_t u0 = timebase_now_us();
+  uint32_t m0 = HAL_GetTick();
+  HAL_Delay(secs * 1000UL);
+  uint64_t u1 = timebase_now_us();
+  uint32_t m1 = HAL_GetTick();
+
+  uint64_t du = u1 - u0;
+  uint32_t dm = m1 - m0;
+
+  /* parts-per-thousand deviation of TIM2 from SysTick */
+  int32_t ppt = (int32_t)((int64_t)du - (int64_t)dm * 1000) * 1000
+                / (int32_t)(dm ? dm * 1000 : 1);
+
+  console_printf("tick: TIM2 %lu us over SysTick %lu ms  (dev %ld ppt)\r\n",
+                 (unsigned long)du, (unsigned long)dm, (long)ppt);
+  console_printf("  now=%lu:%010lu us  wraps=%lu\r\n",
+                 (unsigned long)(u1 >> 32), (unsigned long)(u1 & 0xFFFFFFFFUL),
+                 (unsigned long)timebase_wraps());
+  if (ppt > 20 || ppt < -20)
+    console_printf("  DEVIATION >2%% -- check the TIM2 prescaler "
+                   "(want 31, APB1 timer clock 32 MHz)\r\n");
 }
 
 /* Completes an armed measurement. Called every main-loop iteration. */

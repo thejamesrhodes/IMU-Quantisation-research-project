@@ -248,7 +248,14 @@ Bind it to a keyboard shortcut (Preferences → Keys → *Run Last Launched Exte
 
 CubeMX restores anything outside USER CODE markers. After any `.ioc` regeneration:
 
-- [ ] `USB_DEVICE/Target/usbd_conf.h` — `USBD_MAX_NUM_INTERFACES` back to `2U`
+- [ ] `USB_DEVICE/Target/usbd_conf.h` — `USBD_MAX_NUM_INTERFACES` back to `2U`.
+      **Reverted on every regeneration so far, without exception. Check first.**
+      With `1U` the device enumerates but the CDC data interface is unreachable,
+      so the COM port opens and carries nothing
+- [ ] `STM32F723ZETX_FLASH.ld` — `_Min_Stack_Size` back to `0x1000`. CubeIDE
+      templates the two size lines but leaves the `MEMORY` block and the
+      `.dtcm` section alone, so the DTCM/SRAM1 split survives while the stack
+      silently shrinks to `0x400`
 - [ ] confirm the new source files are still in the build path (`Core/Src`, `USB_DEVICE/App`)
 - [ ] confirm `USER CODE BEGIN Includes` in `usb_device.c` still carries the `USBD_CDC` redirect, and `PreTreatment` the descriptor patch
 - [ ] confirm `CDC_Receive_HS` still calls `fw_rx_isr()` before `console_rx_feed()`, and still ends with the `SetRxBuffer` / `ReceivePacket` pair
