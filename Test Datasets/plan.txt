@@ -1,0 +1,87 @@
+# Sheppard -- NIGHT 1. Upload with the Sequence window, then Arm.
+#
+#   warmup <secs>
+#   step  <label> <secs> <odr> <slot> <def|floor> <offset>    <settle>
+#   phase <label> <secs> <odr> <slot> <def|floor> <num>/<den> <settle>
+#
+# About 3 h 10 min, about 170 MB.
+# ---------------------------------------------------------------------------
+
+# The board self-heats. 6.8 K/h was measured shortly after handling, against a
+# 0.78 K/h gate at ODR 25. Without this every low-ODR step below fails R2.
+warmup 1800
+
+# ---------------------------------------------------------------------------
+# FIRST, because these two decide how the paper is written.
+#
+# A: the J0 validation pair. The 119 Hz line makes the input Gaussian-plus-tone,
+# whose CF is exactly Phi_gauss(u) * J0(uA) -- still closed form, so the
+# analytical chain survives IF the tone behaves as a clean sinusoid. Switching
+# the AAF changes the tone amplitude A by a measured 3.18x while changing the
+# Gaussian sigma by 3.71x, so eta must move in a specific, non-monotonic way.
+# It either does or it does not, and that decides analytical vs empirical.
+# ---------------------------------------------------------------------------
+step aaf_def    300  1000  1  def    0   60
+step aaf_floor  300  1000  1  floor  0   60
+
+# ---------------------------------------------------------------------------
+# B: the OFFSET_USER scale check, which gates the entire phase ladder.
+#
+# One register step should shift mu by exactly 0.512 Delta -- 1/32 dps against
+# Delta = 2000/32768 dps. With sigma = 1.23 Delta and 120 s at ODR 1000,
+# SE(mu) = 0.0035 Delta, so a 0.512 Delta shift is ~150 sigma. Three points
+# rather than two, because linearity is the real question: if step 5 is not
+# five times step 1, the offset is not landing where TN-13 section 4.3 assumes
+# and the ladder measures something other than phase.
+# ---------------------------------------------------------------------------
+# 0, 1, 20, 40. One step alone cannot separate 0.512 from 0.500: both put mu
+# near a half-LSB and the 28 July trio came out at 0.507 +/- 0.03, which admits
+# either. Twenty steps amplifies the difference to 10.24 vs 10.00 -- a quarter
+# of an LSB, far outside the thermal drift in mu over two minutes.
+#
+# READ mu_D, NOT phi. phi wraps at 1, so a 10.24 LSB shift is indistinguishable
+# from 0.24 in the phi column. mu does not wrap and is the direct measurement.
+step off0       120  1000  1  def    0   30
+step off1       120  1000  1  def    1   30
+step off20      120  1000  1  def   20   30
+step off40      120  1000  1  def   40   30
+
+# ---------------------------------------------------------------------------
+# The ODR axis. Lengths from TN-14 section 1.3, except ODR 8000: that table
+# assumed rho = 2.959, but the AAF caps noise bandwidth at 585 Hz so the
+# measured value is 1.11 -- statistically the same point as ODR 1000, which
+# TN-14 sizes at 231k samples. 300 s gives 2.4M, a 10x margin.
+#
+# ASCENDING ODR. The 28 July night ran descending, on the reasoning that the
+# die would then be cooling gently rather than warming -- and every gated
+# record on slot 1 failed R2. A cooling die is still a drifting die, and the
+# thermal time constant after 8 kHz logging is tens of minutes against settles
+# of 60-300 s. Slot 2 did better only because it ran 90 minutes later, once
+# the board had stabilised of its own accord.
+#
+# So: the GATED records first, from a long idle warmup where dissipation is
+# low and steady, and the ungated high-ODR steps last where drift cannot
+# invalidate anything. ODR 25 now runs on the flattest part of the whole night
+# instead of the steepest.
+# ---------------------------------------------------------------------------
+step s1_odr25   1200    25  1  def  0  600
+step s1_odr50    600    50  1  def  0  300
+step s1_odr100   300   100  1  def  0  300
+step s1_odr200   498   200  1  def  0  300
+
+# Specimen 2, gated points, while the board is still in its low-dissipation
+# state. SPI has been matched at 8 MHz since 0.2.12, so this is a clean
+# specimen comparison rather than a specimen-plus-bus-rate comparison.
+step s2_odr25   1200    25  2  def  0  600
+step s2_odr50    600    50  2  def  0  300
+step s2_odr100   300   100  2  def  0  300
+step s2_odr200   498   200  2  def  0  300
+
+# Ungated. No thermal gate applies at ODR >= 500 because eta is phase-flat
+# there, so these can absorb the self-heating from 8 kHz logging freely.
+step s1_odr500   120   500  1  def  0   60
+step s1_odr1000  228  1000  1  def  0   60
+step s1_odr8000  300  8000  1  def  0   60
+step s2_odr500   120   500  2  def  0   60
+step s2_odr1000  228  1000  2  def  0   60
+step s2_odr8000  300  8000  2  def  0   60

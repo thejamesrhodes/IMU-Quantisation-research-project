@@ -1,0 +1,52 @@
+\section{Background and related work}
+\label{sec:background}
+
+% ---------------------------------------------------------------------------
+% ~800 words.
+%
+% Cite Bennett (1948), Sripad & Snyder (1977), Widrow & Kollar (2008)
+% OURSELVES, as the foundation. Objections v2.1 Z.2 is explicit: the "this is
+% Bennett with a gyroscope attached" objection must be pre-empted by citing
+% Bennett first, not conceded later.
+%
+% Then IEEE-952 Q and why it is the wrong architecture for a rate register.
+% Then Table 1.
+%
+% FRAMING FOR TABLE 1 -- this wording is load-bearing and a referee will
+% check it. From GMWM-to-Kalman-Q v1.2 Z.4:
+%
+%   The surveyed pipelines DO NOT MODEL register quantisation AT ALL. It is
+%   absent from the model set, not approximated within it.
+%
+% Do NOT write "they adopt the Delta^2/12 model and it is invalid". That is
+% false. The gap is total, which is a STRONGER result, not a weaker one.
+% ---------------------------------------------------------------------------
+
+\begin{table}[t]
+\centering
+\caption{Stochastic calibration pipelines. \todo{From GMWM-to-Kalman-Q v1.2
+\S3, with its Z.4 correction applied.}}
+\label{tab:toolchains}
+\begin{tabular}{lcccc}
+\toprule
+Pipeline & $\sqrt{\mathrm{ODR}}$ transfer & Models register
+         & Exposes $\rhod$ & Assumes \\
+         &                                & quantisation
+         & or $\mu$        & PQN \\
+\midrule
+Kalibr              & stated as a \emph{condition} & no & no & implicitly \\
+\texttt{allan\_variance\_ros} & yes & no & no & implicitly \\
+\texttt{imu\_utils}          & yes & no & no & implicitly \\
+GMWM (\texttt{simts}/\texttt{wv}) & per-config fit & IEEE-952 $-1$ only & no & implicitly \\
+MATLAB Sensor Fusion & yes & no & no & implicitly \\
+NaveGo              & yes & no & no & implicitly \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\gap{Every row needs a citable source -- documentation URL with access date,
+or a source-file line reference. This table is the paper's empirical
+foundation for the claim that the misattribution is universal rather than a
+strawman, so it must be checkable line by line.}
+
+\todo{Write.}

@@ -2,16 +2,30 @@
 """
 sheppard_console.py -- companion app for the Sheppard IMU board.
 
-One window that replaces Tera Term and the command-line scripts:
+One window that replaces Tera Term and the command-line scripts. Five tabs
+across the top, a left rail that does not change with them:
 
-  * finds and opens the board by USB ID, never by COM number, and reconnects
-    on its own every time the board resets
-  * terminal with history, timestamps, hex view, find, and file logging
-  * Flash button, with a stale-image guard and a version read-back
-  * Self-test button, running the same safety checks as sheppard_selftest.py
-  * editable macro buttons for whatever you type most
+  Console    terminal with history, timestamps, hex view, find, file logging
+  Records    the SD card: list, download with CRC verification, delete
+  Sequence   compose a campaign plan, upload it line by line, arm it
+  Analysis   run analyse.py / figures.py / offset_fit.py against the local
+             records, with live output and a Stop button, and read
+             summary.csv as a sortable table rather than in Notepad
+  Figures    render the PNGs in the application, with the TN-20 §6 captions
+
+The rail keeps Flash, the macro buttons and the link trace visible on every
+tab, because an instrument whose connection indicator disappears when you
+change view is an instrument you stop trusting.
+
+Ctrl+1..5 move between tabs.
 
 With this open, STM32CubeIDE only has to build. Edit, Ctrl+B, press Flash.
+
+Analysis and Figures are optional. They are the only part of the app that
+wants matplotlib or Pillow anywhere near it; if either import fails the two
+tabs are simply absent and the reason appears under the Go menu. A console
+that will not open because a plotting library is missing would be a poor
+trade on a night when the only job is to check the board is still logging.
 
     pip install pyserial
     python sheppard_console.py
@@ -41,7 +55,6 @@ in the header.
 
 from __future__ import annotations
 
-import collections
 import glob
 import json
 import os
@@ -59,6 +72,28 @@ try:
 except ImportError:
     print("pyserial is required:  pip install pyserial", file=sys.stderr)
     sys.exit(1)
+
+# The palette and the shared widgets live in console_theme so that the
+# analysis panels can use them without importing the console back. Every name
+# the rest of this file used before still resolves; nothing moved except where
+# it is defined.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from console_theme import (                                   # noqa: E402
+    C_DIM, C_EDGE, C_ERROR, C_FAINT, C_HILITE, C_INK, C_OK, C_PANEL,
+    C_SENT, C_SIGNAL, C_TERM, C_TEXT, C_TRUE, F_MONO, F_UI,
+    FlatButton, Sparkline, StepBar, TabStrip, sep,
+)
+
+# The analysis and figure panels are optional: they are the only part of the
+# app that wants matplotlib anywhere near it, and a console that will not open
+# because a plotting library is missing would be a poor trade. If the import
+# fails the tabs are simply absent and the reason is printed once.
+try:
+    from console_analysis import AnalysisPanel, FiguresPanel  # noqa: E402
+    ANALYSIS_ERROR = ""
+except Exception as _e:                                       # noqa: BLE001
+    AnalysisPanel = FiguresPanel = None
+    ANALYSIS_ERROR = f"{type(_e).__name__}: {_e}"
 
 
 # ===========================================================================
@@ -87,32 +122,6 @@ DEFAULT_MACROS = [
     ("rate 10m", "rate 600"),
     ("rate stop", "rate stop"),
 ]
-
-
-# ===========================================================================
-# Palette
-#
-# Instrument-panel rather than code-editor: ink background, a single warm
-# signal colour for the quantised trace, cool cyan for anything the operator
-# sent, and a muted red reserved for the quantisation error and for failures.
-# ===========================================================================
-
-C_INK     = "#0e1116"
-C_PANEL   = "#141922"
-C_EDGE    = "#212936"
-C_TERM    = "#0a0d11"
-C_TEXT    = "#cdd6e0"
-C_DIM     = "#5d6b7a"
-C_FAINT   = "#2b3542"
-C_SIGNAL  = "#e8a33d"    # the quantised staircase
-C_TRUE    = "#7d8996"    # the true, unquantised input
-C_ERROR   = "#d4585a"    # e = Q(x) - x, and failures
-C_SENT    = "#57c7d4"
-C_OK      = "#5fbf8f"
-C_HILITE  = "#26374d"
-
-F_MONO = "Consolas"
-F_UI = "Segoe UI"
 
 
 # ===========================================================================
@@ -171,6 +180,68 @@ def find_project_root():
             if parent == d:
                 break
             d = parent
+    return None
+
+
+def workspace_root():
+    """The folder holding the whole project, not just the firmware.
+
+    find_project_root() locates the directory containing Core/Inc/... which is
+    the FIRMWARE root (`GMWM Software`). Records, figures and notes live one
+    level above it, alongside the firmware rather than inside it.
+    """
+    fw = find_project_root()
+    if fw:
+        parent = os.path.dirname(fw)
+        if parent and os.path.isdir(parent):
+            return parent
+        return fw
+    return os.getcwd()
+
+
+def default_dir(name):
+    """A project sub-directory, created on demand.
+
+    Anchored on the project root rather than the current working directory:
+    the app is launched from a shortcut as often as from a shell, and the two
+    give different answers. Records and figures then always land in the same
+    place however the console was started, which matters when the analysis
+    path has to be reproducible.
+    """
+    d = os.path.join(workspace_root(), name)
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        pass
+    return d
+
+
+def tool_script(name):
+    """Absolute path to a sibling tool such as analyse.py.
+
+    __file__ is NOT reliable here. Launched from a shortcut it can be a bare
+    filename, and os.path.abspath() then joins it to the current working
+    directory -- which is how the analyser came to be looked for on the
+    Desktop. The firmware root is found by marker file, so derive from that
+    first and only fall back to __file__ afterwards.
+    """
+    cands = []
+    fw = find_project_root()
+    if fw:
+        cands.append(os.path.join(fw, "tools", name))
+    try:
+        cands.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  name))
+    except NameError:
+        pass
+    if sys.argv and sys.argv[0]:
+        cands.append(os.path.join(
+            os.path.dirname(os.path.abspath(sys.argv[0])), name))
+    cands.append(os.path.join(os.getcwd(), name))
+
+    for c in cands:
+        if os.path.isfile(c):
+            return c
     return None
 
 
@@ -545,118 +616,9 @@ class QuantiserGlyph(tk.Canvas):
                                      fill=self.colour, outline="")
 
 
-class StepBar(tk.Canvas):
-    """Progress shown as filled quantiser levels rather than a smooth bar.
-    Sixteen cells, because a smooth bar would be a small lie on a board whose
-    entire subject is what happens when you cannot have smooth."""
-
-    CELLS = 16
-
-    def __init__(self, master, height=7, **kw):
-        super().__init__(master, height=height, bg=C_TERM,
-                         highlightthickness=0, **kw)
-        self.h = height
-        self.value = 0.0
-        self.bind("<Configure>", lambda _e: self.redraw())
-
-    def set(self, pct):
-        self.value = max(0.0, min(100.0, pct))
-        self.redraw()
-
-    def redraw(self):
-        self.delete("all")
-        w = self.winfo_width() or 1
-        gap = 2
-        cw = (w - gap * (self.CELLS - 1)) / self.CELLS
-        lit = self.value / 100.0 * self.CELLS
-        for i in range(self.CELLS):
-            x0 = i * (cw + gap)
-            frac = max(0.0, min(1.0, lit - i))
-            self.create_rectangle(x0, 0, x0 + cw, self.h,
-                                  fill=C_FAINT, outline="")
-            if frac > 0:
-                self.create_rectangle(x0, 0, x0 + cw * frac, self.h,
-                                      fill=C_SIGNAL, outline="")
-
-
-class Sparkline(tk.Canvas):
-    """Link activity as a sample-and-hold trace: horizontal treads with
-    vertical risers, the same shape as the emblem, doing something useful."""
-
-    def __init__(self, master, width=168, height=34, points=56, **kw):
-        super().__init__(master, width=width, height=height, bg=C_TERM,
-                         highlightthickness=0, **kw)
-        self.w, self.h = width, height
-        self.data = collections.deque([0] * points, maxlen=points)
-
-    def push(self, value):
-        self.data.append(value)
-        self.redraw()
-
-    def redraw(self):
-        self.delete("all")
-        n = len(self.data)
-        peak = max(max(self.data), 1)
-        dx = self.w / n
-        prev_y = None
-        for i, v in enumerate(self.data):
-            y = self.h - 2 - (self.h - 5) * (v / peak)
-            x0, x1 = i * dx, (i + 1) * dx
-            if prev_y is not None:
-                self.create_line(x0, prev_y, x0, y, fill=C_SIGNAL, width=1)
-            self.create_line(x0, y, x1, y, fill=C_SIGNAL, width=1)
-            prev_y = y
-        self.create_line(0, self.h - 1, self.w, self.h - 1,
-                         fill=C_FAINT, width=1)
-
-
-class FlatButton(tk.Frame):
-    def __init__(self, master, text, command, width=None, accent=False,
-                 small=False, **kw):
-        bg = C_SIGNAL if accent else "#1c232e"
-        fg = "#120c04" if accent else C_TEXT
-        super().__init__(master, bg=bg, highlightthickness=0, **kw)
-        self._bg, self._accent, self._cmd = bg, accent, command
-        self._enabled = True
-        self.label = tk.Label(self, text=text, bg=bg, fg=fg,
-                              font=(F_UI, 8 if small else 9,
-                                    "bold" if accent else "normal"),
-                              padx=8, pady=4 if small else 6)
-        if width:
-            self.label.configure(width=width)
-        self.label.pack(fill="both", expand=True)
-        for w in (self, self.label):
-            w.bind("<Button-1>", self._click)
-            w.bind("<Enter>", self._enter)
-            w.bind("<Leave>", self._leave)
-
-    def _click(self, _e):
-        if self._enabled and self._cmd:
-            self._cmd()
-
-    def _enter(self, _e):
-        if self._enabled:
-            hot = "#f2b757" if self._accent else "#28313f"
-            self.configure(bg=hot)
-            self.label.configure(bg=hot)
-
-    def _leave(self, _e):
-        if self._enabled:
-            self.configure(bg=self._bg)
-            self.label.configure(bg=self._bg)
-
-    def set_enabled(self, on):
-        self._enabled = on
-        bg = self._bg if on else "#151a21"
-        fg = ("#120c04" if self._accent else C_TEXT) if on else C_DIM
-        self.configure(bg=bg)
-        self.label.configure(bg=bg, fg=fg)
-
-
-def sep(master, horizontal=True):
-    return tk.Frame(master, bg=C_EDGE,
-                    height=1 if horizontal else 0,
-                    width=0 if horizontal else 1)
+# StepBar, Sparkline, FlatButton and sep() now live in console_theme.py and
+# are imported at the top of this file. QuantiserGlyph stays here: it is not
+# a reusable widget, it is this application's emblem.
 
 
 # ===========================================================================
@@ -684,32 +646,28 @@ def tag_for_line(line: str):
 # Application
 # ===========================================================================
 
-class DatasetWindow(tk.Toplevel):
+class DatasetPanel(tk.Frame):
     """File manager for the records on the SD card.
 
-    A separate window rather than a tab, because the terminal pane owns the
-    main layout and the two jobs are genuinely separate: one is a live console,
-    the other is a transfer that must not have console traffic interleaved with
-    it. The Board reader thread switches to byte capture for the duration, so
-    nothing of the payload reaches the terminal widget -- which is what made
-    typing `get` by hand appear to hang the app.
+    Was a separate Toplevel; now a tab. The reason for the original split has
+    not gone away -- a transfer must not have console traffic interleaved with
+    it, and the Board reader thread switches to byte capture for the duration
+    so that nothing of the payload reaches the terminal widget. That is a
+    property of the Board object, not of the window, and it survives the move.
+    What the move buys is that the card listing, the plan and the figures are
+    now one application rather than four windows to arrange.
 
-    Threading: the transfer runs on a worker; the window polls its own state
+    Threading: the transfer runs on a worker; the panel polls its own state
     with after() rather than routing through the App's UI queue, so nothing in
     the existing console path changes.
     """
 
     POLL_MS = 80
 
-    def __init__(self, app):
-        super().__init__(app.root)
+    def __init__(self, master, app):
+        super().__init__(master, bg=C_INK)
         self.app = app
         self.board = app.board
-
-        self.title("Sheppard — datasets")
-        self.configure(bg=C_INK)
-        self.geometry("720x460")
-        self.minsize(560, 360)
 
         self._lock = threading.Lock()
         self._log_q = []
@@ -720,13 +678,15 @@ class DatasetWindow(tk.Toplevel):
         self._files = []
         self._worker = None
 
-        self.dest = app.cfg.get("dataset_dir") or os.path.join(
-            find_project_root() or os.getcwd(), "Test Datasets")
-
         self._build()
-        self.protocol("WM_DELETE_WINDOW", self._close)
         self.after(self.POLL_MS, self._poll)
-        self.refresh()
+
+    @property
+    def dest(self):
+        """One folder, owned by the App, so the Records tab downloads into the
+        same place the Analysis tab reads from. Two settings keys drifting
+        apart was the failure mode this replaces."""
+        return self.app.dataset_dir
 
     # --- layout -----------------------------------------------------------
 
@@ -796,9 +756,7 @@ class DatasetWindow(tk.Toplevel):
         d = filedialog.askdirectory(initialdir=self.dest,
                                     title="Where to save records")
         if d:
-            self.dest = d
-            self.app.cfg["dataset_dir"] = d
-            save_settings(self.app.cfg)
+            self.app.set_dataset_dir(d)
             self._update_dest()
             self.refresh()
 
@@ -1024,10 +982,15 @@ class DatasetWindow(tk.Toplevel):
 
     @property
     def figdir(self):
-        return self.app.cfg.get("fig_dir") or os.path.join(
-            find_project_root() or os.getcwd(), "Figures")
+        return self.app.figdir
 
     def _open_figs(self):
+        """Straight to the Figures tab, which renders them in place. The old
+        behaviour -- hand the folder to Explorer -- is still one click away
+        from there, and is the fallback if the panel failed to import."""
+        if AnalysisPanel is not None:
+            self.app.show_tab("figures")
+            return
         d = self.figdir
         os.makedirs(d, exist_ok=True)
         try:
@@ -1051,8 +1014,12 @@ class DatasetWindow(tk.Toplevel):
     def _ana_worker(self, files):
         import subprocess
 
-        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              "analyse.py")
+        script = tool_script("analyse.py")
+        if script is None:
+            self._log("analyse: cannot find analyse.py -- it should sit next "
+                      "to sheppard_console.py in GMWM Software\\tools")
+            self._set(status="analyse.py not found")
+            return
         figdir = self.figdir
         os.makedirs(figdir, exist_ok=True)
 
@@ -1082,6 +1049,9 @@ class DatasetWindow(tk.Toplevel):
 
         self._set(status=f"analysed {len(files)}; figures in {figdir}",
                   prog=(len(files), len(files)))
+        # Tk is not thread-safe, so the refresh is scheduled onto the main
+        # loop rather than called from this worker.
+        self.after(0, self.app.figures_changed)
 
     # --- delete -----------------------------------------------------------
 
@@ -1110,14 +1080,292 @@ class DatasetWindow(tk.Toplevel):
         self.board.proto_end()
         self._ls_worker()
 
-    def _close(self):
+    def can_leave(self) -> bool:
+        """Asked before the tab strip moves away, and before the app closes.
+
+        A transfer that is interrupted leaves a .part file and a board still
+        streaming into a dead capture buffer, so it is worth one question."""
+        if not self._busy:
+            return True
+        return messagebox.askyesno(
+            "Transfer running",
+            "A transfer is in progress. Leave this tab anyway?\n\n"
+            "The download will be abandoned and the partial file discarded.",
+            parent=self)
+
+
+class SequencePanel(tk.Frame):
+    """Compose a campaign plan, upload it, arm it.
+
+    The SD card cannot be removed, so the plan reaches it the same way
+    everything else does -- one line at a time over the console, via `seq add`.
+    The board echoes each line back and this checks the echo, so a line mangled
+    by a dropped byte is caught at upload time rather than at 02:00 when the
+    settle field has silently vanished and every low-ODR record fails its
+    thermal gate.
+
+    Editing happens here, in a text box, not on the board: `seq` deliberately
+    has no line editing. A plan is short enough to resend in full, and a
+    half-edited plan that ran overnight would be worse than no plan at all.
+    """
+
+    POLL_MS = 100
+
+    def __init__(self, master, app):
+        super().__init__(master, bg=C_INK)
+        self.app = app
+        self.board = app.board
+
+        self._lock = threading.Lock()
+        self._log_q = []
+        self._status = ""
+        self._finished = False
+        self._busy = False
+
+        self._build()
+        self.after(self.POLL_MS, self._poll)
+        self._load_default()
+
+    def can_leave(self) -> bool:
+        return True
+
+    def _build(self):
+        head = tk.Frame(self, bg=C_PANEL)
+        head.pack(fill="x")
+        tk.Label(head, text="PLAN", bg=C_PANEL, fg=C_DIM,
+                 font=(F_UI, 8, "bold")).pack(side="left", padx=(14, 8), pady=9)
+        tk.Label(head, text="one directive per line   #  comments",
+                 bg=C_PANEL, fg=C_FAINT,
+                 font=(F_MONO, 8)).pack(side="left", pady=9)
+
+        bar = tk.Frame(self, bg=C_INK)
+        bar.pack(fill="x", padx=10, pady=(9, 4))
+        self.buttons = []
+        for text, cmd, accent in (
+                ("Open...", self._open, False),
+                ("Save as...", self._save, False),
+                ("Upload to board", self.upload, True),
+                ("Read from board", self.read_back, False),
+                ("Arm", self.arm, True),
+                ("Disarm", self.disarm, False),
+                ("Status", self.status, False),
+                ("Run now", self.run_now, False)):
+            b = FlatButton(bar, text, cmd, small=True, accent=accent)
+            b.pack(side="left", padx=2)
+            self.buttons.append(b)
+
+        wrap = tk.Frame(self, bg=C_EDGE)
+        wrap.pack(fill="both", expand=True, padx=10, pady=4)
+        self.text = tk.Text(wrap, bg=C_TERM, fg=C_TEXT, bd=0,
+                            insertbackground=C_TEXT, highlightthickness=0,
+                            font=(F_MONO, 9), wrap="none", undo=True)
+        self.text.pack(fill="both", expand=True, padx=1, pady=1)
+
+        self.est_var = tk.StringVar(value="")
+        tk.Label(self, textvariable=self.est_var, bg=C_INK, fg=C_SIGNAL,
+                 font=(F_MONO, 9), anchor="w").pack(fill="x", padx=12)
+        self.stat_var = tk.StringVar(value="")
+        tk.Label(self, textvariable=self.stat_var, bg=C_INK, fg=C_DIM,
+                 font=(F_MONO, 8), anchor="w").pack(fill="x", padx=12,
+                                                    pady=(0, 8))
+        self.text.bind("<KeyRelease>", lambda _e: self._estimate())
+
+    # --- plan text --------------------------------------------------------
+
+    def _plan_path(self):
+        return os.path.join(self.app.dataset_dir, "plan.txt")
+
+    def _load_default(self):
+        p = self._plan_path()
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as fh:
+                self.text.insert("1.0", fh.read())
+        self._estimate()
+
+    def _open(self):
+        p = filedialog.askopenfilename(
+            initialdir=default_dir("Test Datasets"),
+            filetypes=[("Plan", "*.txt"), ("All", "*.*")], parent=self)
+        if p:
+            with open(p, "r", encoding="utf-8") as fh:
+                self.text.delete("1.0", "end")
+                self.text.insert("1.0", fh.read())
+            self._estimate()
+
+    def _save(self):
+        p = filedialog.asksaveasfilename(
+            initialdir=default_dir("Test Datasets"), initialfile="plan.txt",
+            defaultextension=".txt", parent=self)
+        if p:
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(self.text.get("1.0", "end-1c"))
+            self.stat_var.set(f"saved {p}")
+
+    def _lines(self):
+        out = []
+        for raw in self.text.get("1.0", "end-1c").splitlines():
+            s = raw.strip()
+            if s and not s.startswith("#"):
+                out.append(s)
+        return out
+
+    def _estimate(self):
+        """Wall clock, so a plan that cannot finish overnight is obvious now."""
+        total, steps = 0, 0
+        for s in self._lines():
+            t = s.split()
+            if t[0] in ("step", "phase") and len(t) >= 3:
+                steps += 1
+                total += int(t[2]) if t[2].isdigit() else 0
+                if len(t) >= 8 and t[7].isdigit():
+                    total += int(t[7])
+            elif t[0] == "warmup" and len(t) >= 2 and t[1].isdigit():
+                total += int(t[1])
+        h, m = divmod(total // 60, 60)
+        self.est_var.set(f"{steps} steps,  about {h} h {m:02d} min of wall "
+                         f"clock,  finishes ~{_finish_time(total)}")
+
+    # --- board ------------------------------------------------------------
+
+    def _log(self, s):
+        with self._lock:
+            self._log_q.append(s)
+
+    def _poll(self):
+        with self._lock:
+            msgs, self._log_q = self._log_q, []
+            status = self._status
+            fin, self._finished = self._finished, False
+        for m in msgs:
+            self.app._note(m, "app")
+        if status:
+            self.stat_var.set(status)
+        if fin:
+            self._busy = False
+            self.app._set_busy(False)
+            for b in self.buttons:
+                b.set_enabled(True)
+        self.after(self.POLL_MS, self._poll)
+
+    def _start(self, fn, *a):
         if self._busy:
-            if not messagebox.askyesno("Transfer running",
-                                       "A transfer is in progress. Close "
-                                       "anyway?", parent=self):
+            return
+        if not self.board.connected.is_set():
+            self.stat_var.set("board not connected")
+            return
+        self._busy = True
+        self.app._set_busy(True)
+        for b in self.buttons:
+            b.set_enabled(False)
+        threading.Thread(target=self._wrap, args=(fn,) + a,
+                         daemon=True).start()
+
+    def _wrap(self, fn, *a):
+        try:
+            fn(*a)
+        except Exception as e:                             # noqa: BLE001
+            self._log(f"seq: {type(e).__name__}: {e}")
+        finally:
+            self.board.proto_end()
+            with self._lock:
+                self._finished = True
+
+    def _cmd(self, line, expect, timeout=6.0):
+        self.board.send_line(line)
+        got, seen = self.board.expect(expect, timeout)
+        for s in seen:
+            self._log(s)
+        return got
+
+    def upload(self):
+        lines = self._lines()
+        if not lines:
+            self.stat_var.set("nothing to upload")
+            return
+        self._start(self._upload_worker, lines)
+
+    def _upload_worker(self, lines):
+        self.board.proto_begin()
+        with self._lock:
+            self._status = "clearing plan..."
+        if self._cmd("seq new", ["seq: plan cleared", "seq: cannot"], 8.0) is None:
+            self._log("seq: no reply to `seq new`")
+            return
+
+        for i, ln in enumerate(lines, 1):
+            with self._lock:
+                self._status = f"uploading {i}/{len(lines)}"
+            got = self._cmd(f"seq add {ln}", ["seq+ ", "seq: "], 6.0)
+            if got is None or not got.startswith("seq+ "):
+                self._log(f"seq: line {i} rejected: {ln}")
+                with self._lock:
+                    self._status = f"FAILED at line {i}"
                 return
-        self.app.datasets = None
-        self.destroy()
+            # The board echoes what it actually stored. Whitespace is
+            # normalised on the way through, so compare token by token.
+            if got[5:].split() != ln.split():
+                self._log(f"seq: line {i} came back changed:")
+                self._log(f"     sent {ln}")
+                self._log(f"     got  {got[5:]}")
+                with self._lock:
+                    self._status = f"MISMATCH at line {i} -- not armed"
+                return
+
+        with self._lock:
+            self._status = f"uploaded {len(lines)} lines — now Arm"
+
+    def read_back(self):
+        self._start(self._readback_worker)
+
+    def _readback_worker(self):
+        self.board.proto_begin()
+        self.board.send_line("seq plan")
+        _got, seen = self.board.expect(["seq: about", "seq: no plan"], 10.0)
+        for s in seen:
+            self._log(s)
+        with self._lock:
+            self._status = "plan read back into the console log"
+
+    def arm(self):
+        if not self._lines():
+            self.stat_var.set("upload a plan first")
+            return
+        if not messagebox.askyesno(
+                "Arm the sequence",
+                "The board will run this plan automatically at the next "
+                "BATTERY boot.\n\nIt will not run while USB is connected, and "
+                "it disarms itself when the sequence finishes.\n\nArm it?",
+                parent=self):
+            return
+        self._start(self._simple, "seq arm", ["seq: ARMED", "seq: refusing"])
+
+    def disarm(self):
+        self._start(self._simple, "seq disarm", ["seq: disarmed"])
+
+    def status(self):
+        self._start(self._simple, "seq status", ["seq: plan "])
+
+    def run_now(self):
+        if not messagebox.askyesno(
+                "Run now",
+                "Run the plan immediately over USB?\n\nThis blocks the board "
+                "for the full duration of the plan and USB traffic will be "
+                "part of every record.\n\nFor campaign data use Arm and a "
+                "battery boot instead.", parent=self):
+            return
+        self._start(self._simple, "seq run", ["seq: done"], 86400.0)
+
+    def _simple(self, line, expect, timeout=15.0):
+        self.board.proto_begin()
+        got = self._cmd(line, expect, timeout)
+        with self._lock:
+            self._status = got or f"no reply to `{line}`"
+
+
+def _finish_time(seconds: int) -> str:
+    import datetime
+    return (datetime.datetime.now()
+            + datetime.timedelta(seconds=seconds)).strftime("%H:%M")
 
 
 def _hsize(n: float) -> str:
@@ -1133,7 +1381,12 @@ def _verify_sdat(path: str) -> str:
     if not path.lower().endswith(".sdat"):
         return ""
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        s = tool_script("sdat.py")
+        if s is None:
+            return "sdat.py not found"
+        d = os.path.dirname(s)
+        if d not in sys.path:
+            sys.path.insert(0, d)
         import sdat
         res = sdat.verify(path)
     except Exception as e:                                 # noqa: BLE001
@@ -1151,7 +1404,8 @@ class App:
         self.cfg = load_settings()
         self.ui = queue.Queue()
         self.board = Board(self.ui)
-        self.datasets = None            # the record browser, when open
+        self.panels = {}                # key -> the frame, once built
+        self.tab = None                 # the strip, once built
 
         self.project = self.cfg.get("project") or find_project_root()
         if self.project and not os.path.isdir(self.project):
@@ -1229,6 +1483,12 @@ class App:
         sep(r).pack(fill="x")
 
         # ---- body ----------------------------------------------------------
+        #
+        # The left rail stays global rather than becoming per-tab. Flash, the
+        # macro buttons and the link trace are useful whatever you are looking
+        # at, and an instrument whose connection indicator disappears when you
+        # change view is an instrument you stop trusting. Only the main pane
+        # is tabbed.
         body = tk.Frame(r, bg=C_INK)
         body.pack(fill="both", expand=True)
 
@@ -1241,7 +1501,118 @@ class App:
 
         main = tk.Frame(body, bg=C_INK)
         main.pack(side="left", fill="both", expand=True)
-        self._build_terminal(main)
+
+        tabs = [("console", "Console"),
+                ("records", "Records"),
+                ("sequence", "Sequence")]
+        if AnalysisPanel is not None:
+            tabs += [("analysis", "Analysis"), ("figures", "Figures")]
+
+        self.tab = TabStrip(main, tabs, self._on_tab)
+        self.tab.pack(fill="x")
+
+        self.stack = tk.Frame(main, bg=C_INK)
+        self.stack.pack(fill="both", expand=True)
+
+        # The terminal is built eagerly because the banner is written into it
+        # before the first tab change. Everything else is built on first use,
+        # which keeps start-up to the time it takes to open a COM port.
+        self.panels["console"] = tk.Frame(self.stack, bg=C_INK)
+        self._build_terminal(self.panels["console"])
+
+        self.tab.select(self.cfg.get("tab", "console"))
+
+    # -- tabs ---------------------------------------------------------------
+
+    def _make_panel(self, key):
+        if key == "records":
+            return DatasetPanel(self.stack, self)
+        if key == "sequence":
+            return SequencePanel(self.stack, self)
+        if key == "analysis":
+            return AnalysisPanel(self.stack, self)
+        if key == "figures":
+            return FiguresPanel(self.stack, self)
+        return None
+
+    def _on_tab(self, key):
+        current = getattr(self, "_tab_key", None)
+        if current and current in self.panels:
+            panel = self.panels[current]
+            leave = getattr(panel, "can_leave", None)
+            if leave is not None and not leave():
+                # Put the strip back where it was without re-entering here.
+                self.root.after_idle(
+                    lambda: self.tab.select(current, notify=False))
+                return
+            panel.pack_forget()
+
+        panel = self.panels.get(key)
+        if panel is None:
+            panel = self._make_panel(key)
+            if panel is None:
+                return
+            self.panels[key] = panel
+        panel.pack(fill="both", expand=True)
+        self._tab_key = key
+
+        # Cheap refreshes on entry, so a tab never shows a stale folder. Each
+        # of these reads a directory listing and, for records, 4 KiB per file.
+        if key == "records" and self.board.connected.is_set():
+            panel.refresh()
+        elif key == "analysis":
+            panel.rescan()
+        elif key == "figures":
+            panel.rescan()
+        if key == "console":
+            try:
+                self.entry.focus_set()
+            except (AttributeError, tk.TclError):
+                pass
+
+    def show_tab(self, key):
+        if self.tab:
+            self.tab.select(key)
+
+    def figures_changed(self):
+        """Called by the analysis panel when a run has written new PNGs."""
+        p = self.panels.get("figures")
+        if p is not None:
+            p.rescan()
+        if self.tab:
+            self.tab.set_badge("figures", "new")
+
+    # -- shared folders -----------------------------------------------------
+    #
+    # One dataset folder and one figure folder for the whole application. The
+    # Records tab downloads into the first, the Analysis tab summarises it,
+    # and the Figures tab renders what comes out. Before this they were three
+    # separate settings keys that could quietly disagree.
+
+    @property
+    def dataset_dir(self):
+        return self.cfg.get("dataset_dir") or default_dir("Test Datasets")
+
+    @property
+    def figdir(self):
+        return self.cfg.get("fig_dir") or default_dir("Figures")
+
+    def set_dataset_dir(self, path):
+        self.cfg["dataset_dir"] = path
+        save_settings(self.cfg)
+        for key in ("records", "analysis"):
+            p = self.panels.get(key)
+            if p is None:
+                continue
+            if key == "analysis":
+                p.rescan()
+            else:
+                p._update_dest()                             # noqa: SLF001
+
+    def set_fig_dir(self, path):
+        self.cfg["fig_dir"] = path
+        save_settings(self.cfg)
+        self.figures_changed()
 
     def _build_menu(self):
         m = tk.Menu(self.root, tearoff=0)
@@ -1266,6 +1637,24 @@ class App:
         b.add_command(label="Reset board", command=lambda: self._send("reset"))
         b.add_command(label="Read version", command=lambda: self._send("ver"))
         m.add_cascade(label="Board", menu=b)
+
+        g = tk.Menu(m, tearoff=0)
+        for i, (key, label) in enumerate((("console", "Console"),
+                                          ("records", "Records"),
+                                          ("sequence", "Sequence"),
+                                          ("analysis", "Analysis"),
+                                          ("figures", "Figures")), start=1):
+            if key in ("analysis", "figures") and AnalysisPanel is None:
+                continue
+            g.add_command(label=f"{label}\tCtrl+{i}",
+                          command=lambda k=key: self.show_tab(k))
+            self.root.bind(f"<Control-Key-{i}>",
+                           lambda _e, k=key: self.show_tab(k))
+        if AnalysisPanel is None and ANALYSIS_ERROR:
+            g.add_separator()
+            g.add_command(label=f"Analysis unavailable — {ANALYSIS_ERROR}",
+                          state="disabled")
+        m.add_cascade(label="Go", menu=g)
 
         v = tk.Menu(m, tearoff=0)
         self.v_autoscroll = tk.BooleanVar(value=True)
@@ -1333,9 +1722,20 @@ class App:
         FlatButton(side, "Edit buttons...", self._edit_macros,
                    small=True).pack(fill="x", padx=12, pady=(6, 0))
 
-        self._section(side, "datasets")
-        FlatButton(side, "Records on card...", self._open_datasets,
-                   accent=True).pack(fill="x", padx=12, pady=2)
+        self._section(side, "go to")
+        FlatButton(side, "Records on card",
+                   lambda: self.show_tab("records")).pack(fill="x", padx=12,
+                                                          pady=2)
+        FlatButton(side, "Sequence plan",
+                   lambda: self.show_tab("sequence")).pack(fill="x", padx=12,
+                                                           pady=2)
+        if AnalysisPanel is not None:
+            FlatButton(side, "Analysis",
+                       lambda: self.show_tab("analysis")).pack(fill="x",
+                                                               padx=12, pady=2)
+            FlatButton(side, "Figures",
+                       lambda: self.show_tab("figures")).pack(fill="x",
+                                                              padx=12, pady=2)
 
         self._section(side, "board")
         FlatButton(side, "Reset", lambda: self._send("reset"),
@@ -1360,18 +1760,6 @@ class App:
         tk.Label(foot, textvariable=self.peak_var, bg=C_PANEL, fg=C_FAINT,
                  font=(F_MONO, 7), anchor="e").pack(fill="x", padx=14,
                                                     pady=(2, 0))
-
-    def _open_datasets(self):
-        """Open the record browser, or raise it if it is already open."""
-        if getattr(self, "datasets", None) is not None:
-            try:
-                self.datasets.deiconify()
-                self.datasets.lift()
-                self.datasets.focus_force()
-                return
-            except tk.TclError:
-                self.datasets = None
-        self.datasets = DatasetWindow(self)
 
     def _rebuild_macros(self):
         for w in self.macro_frame.winfo_children():
@@ -1479,6 +1867,9 @@ class App:
             "colour": self.v_colour.get(),
             "animate": self.v_animate.get(),
             "macros": self.cfg.get("macros") or DEFAULT_MACROS,
+            "tab": getattr(self, "_tab_key", "console"),
+            "dataset_dir": self.dataset_dir,
+            "fig_dir": self.figdir,
         }
 
     def _update_bin_label(self):
@@ -1742,9 +2133,9 @@ class App:
         # appear to hang. Route it to the browser, which puts the reader thread
         # into byte-capture mode for the duration instead.
         if cmd.split()[:1] == ["get"]:
-            self._note("`get` streams raw binary — opening the record browser "
-                       "instead", "app")
-            self._open_datasets()
+            self._note("`get` streams raw binary — switching to the Records "
+                       "tab instead", "app")
+            self.show_tab("records")
             return
         if self.v_echo.get():
             self._flush_pending()
@@ -2048,6 +2439,14 @@ class App:
 
                 elif kind == "connected":
                     self.root.after(700, lambda: self._quiet("ver"))
+                    # The Records tab lists the card, so it is stale the
+                    # moment the board resets. Refresh it if it is the one
+                    # on screen; leave it alone otherwise, because a listing
+                    # costs a console round trip.
+                    if getattr(self, "_tab_key", None) == "records":
+                        p = self.panels.get("records")
+                        if p is not None:
+                            self.root.after(900, p.refresh)
 
                 elif kind == "disconnected":
                     self.fw_var.set("firmware unknown")
@@ -2113,12 +2512,16 @@ class App:
                     "An operation is in progress.\nQuitting now could leave "
                     "the board unbootable.\n\nQuit anyway?"):
                 return
-        if self.datasets is not None:
-            try:
-                self.datasets.destroy()
-            except tk.TclError:
-                pass
-            self.datasets = None
+        for panel in self.panels.values():
+            leave = getattr(panel, "can_leave", None)
+            if leave is not None and not leave():
+                return
+            stop = getattr(panel, "stop", None)
+            if stop is not None:
+                try:
+                    stop()
+                except Exception:                            # noqa: BLE001
+                    pass
         if self.logfile:
             self.logfile.close()
         self.cfg.update(self._collect_settings())

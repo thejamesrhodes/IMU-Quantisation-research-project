@@ -72,30 +72,37 @@ void led_task(void)
   uint32_t ms = (uint32_t)(((timebase_now_us() - s_t0) / 1000ULL) % 2000ULL);
 
   /* --- LED1: alive ------------------------------------------------------ */
+  /*
+   * Patterns, not brightness. The first version breathed with software PWM,
+   * which is unreadable when the four LEDs sit side by side: a dim LED next to
+   * a bright one just looks like a dim LED, and you cannot tell "idle" from
+   * "half-broken". Distinct RHYTHMS survive that, and they survive being seen
+   * out of the corner of your eye from across the room, which is the actual
+   * use case at 8 a.m. after an unattended run.
+   *
+   *   idle      one short flash every 2 s          "alive, doing nothing"
+   *   record    even 2 Hz square                   "working"
+   *   sequence  three quick flashes, then a gap    "working through a list"
+   *   busy      8 Hz stutter                       "do not unplug"
+   */
   int alive;
   switch (s_mode)
   {
     case LED_MODE_REC:
+      alive = ((ms % 500U) < 250U);                  /* 2 Hz, 50% duty     */
+      break;
+
     case LED_MODE_SEQ:
-      /* 4 Hz: unmistakably "running", and fast enough that a frozen board is
-         obvious at a glance. */
-      alive = ((ms % 250U) < 125U);
+      /* Three 90 ms flashes inside the first 600 ms, then 1.4 s dark. */
+      alive = ((ms < 600U) && ((ms % 200U) < 90U));
       break;
 
     case LED_MODE_BUSY:
-      alive = ((ms % 100U) < 50U);                   /* 10 Hz, urgent      */
+      alive = ((ms % 125U) < 62U);                   /* 8 Hz               */
       break;
 
     default:
-      /* Idle breathe. Software PWM at ~1 kHz with a triangular envelope over
-         the 2 s cycle. Only ever runs when nothing is being recorded, so the
-         switching activity cannot couple into a dataset (rule R8). */
-      {
-        uint32_t tri = (ms < 1000U) ? ms : (2000U - ms);   /* 0..1000     */
-        uint32_t duty = tri / 12U;                         /* 0..83 of 100 */
-        uint32_t us = (uint32_t)(timebase_now_us() % 1000ULL);
-        alive = (us < (duty * 10U));
-      }
+      alive = (ms < 80U);                            /* one blip per 2 s   */
       break;
   }
   put(LED_1_GPIO_Port, LED_1_Pin, alive);

@@ -78,6 +78,9 @@ import sdat                                            # noqa: E402
 # so this is exactly 2**4 -- established by measurement in TN-19 section 1, not
 # assumed from the datasheet.
 FINE_PER_LSB = 16.0
+# The 20-bit hi-res field's gyro LSB is always zero (TN-19 s1), so the
+# reachable lattice of x = gyro20/16 has spacing 2/16 Delta, not 1/16.
+REF_STEP = 2.0 / FINE_PER_LSB          # 0.125 Delta
 
 # One 16-bit LSB in dps at FSR +/-2000.  32768/2000 = 16.384 codes/dps.
 DELTA_DPS = 1.0 / 16.384
@@ -152,6 +155,43 @@ def running_median(y: np.ndarray, width: int) -> np.ndarray:
         return np.array([np.median(pad[i:i + width]) for i in range(y.size)])
 
 
+def drift_excursion(y: np.ndarray, fs: float, block_s: float = 2.0) -> float:
+    """Signed excursion of the linear trend of `y` across the whole record.
+
+    WHY NOT max - min.  The obvious statistic, and the one this file used until
+    29 July 2026, is the sample range.  It is an extreme-value statistic: for
+    N independent samples of a Gaussian it grows as roughly 8.5 sigma at
+    N = 6e4, and it therefore measures the SENSOR's noise, not the quantity's
+    drift.  Measured on r358768_off_0a: the raw range of the die temperature is
+    823 mK, the per-sample sensor noise is 84 mK, and the actual linear drift
+    across the record is 103 mK.  Seven eighths of the reported "temperature
+    span" was the thermometer talking to itself.
+
+    Worse, it is not comparable across the ODR axis, because the temperature
+    channel is filtered with ODR: sigma_T measures 13 mK at ODR 25 and 120 mK
+    at ODR 8000.  A gate on the range therefore tightens as ODR falls for a
+    reason that has nothing to do with temperature -- which is precisely the
+    part of the axis the paper depends on.
+
+    Blocking to `block_s` first collapses the sensor noise by sqrt(n_block)
+    before the line is fitted, so the trend is estimated from means rather
+    than from samples.
+    """
+    n = y.size
+    b = max(int(round(block_s * fs)), 1)
+    nb = n // b
+    if nb < 3:                       # too short to block: fall back to samples
+        m, span = y.astype(np.float64), n / max(fs, 1e-9)
+        j = np.arange(m.size, dtype=np.float64)
+    else:
+        m = y[:nb * b].reshape(nb, b).mean(axis=1).astype(np.float64)
+        j = np.arange(nb, dtype=np.float64)
+        span = nb
+    jc = j - j.mean()
+    slope = float(np.dot(jc, m - m.mean()) / np.dot(jc, jc))
+    return slope * (j[-1] - j[0])
+
+
 def detrend_linear(x: np.ndarray) -> np.ndarray:
     """Remove a straight line.
 
@@ -218,6 +258,31 @@ class Stats:
         self.mu = float(x_lsb.mean())
         self.phi = float(self.mu % 1.0)
 
+        # ---- the reference stream is a quantiser too -----------------------
+        #
+        # x is not the continuous input. It is the 20-bit hi-res field divided
+        # by 16, and that field is ITSELF a truncating quantiser: TN-19 s1
+        # established that the gyro LSB of the field is always zero, so the
+        # reachable lattice has spacing REF_STEP = 2/16 = 0.125 Delta, and the
+        # register is a floor, not a rounder.
+        #
+        # A truncator has a deterministic mean error of -step/2. So the mean of
+        # the reference stream sits half a fine code BELOW the mean of the
+        # quantity it is standing in for, and every phase read from it is low
+        # by REF_STEP/2 = 1/16 Delta. Its variance likewise carries step^2/12
+        # of its own quantisation noise, which is Sheppard (1898) applied to
+        # the board's own reference channel -- the correction the board is
+        # named after, needed one level below where anyone was looking for it.
+        #
+        # Measured effect, 29 July phase sweep (16 records x 3 axes, ODR 50):
+        # residual against the exact theory falls from RMS 0.393 to 0.018 with
+        # NO free parameters, and the same two corrections improve the
+        # independent 28 July ODR axis by 76% out of sample.
+        #
+        # Raw phi/rho are retained so the change is auditable and so anything
+        # computed before 29 July 2026 can still be reproduced.
+        self.phi_ref = float((self.mu + REF_STEP / 2.0) % 1.0)
+
         # Primary sigma: detrended, so a slow thermal ramp does not masquerade
         # as noise.  The other two are cross-checks, reported so a disagreement
         # is visible rather than averaged away.
@@ -229,6 +294,10 @@ class Stats:
         self.sigma_diff = float(np.diff(x_lsb).std(ddof=1) / math.sqrt(2.0))
 
         self.rho = self.sigma                        # sigma is already in Delta
+        # Sheppard on the reference channel: subtract the fine quantiser's own
+        # variance before calling the result the input's. See phi_ref above.
+        self.rho_ref = float(math.sqrt(max(self.sigma ** 2
+                                           - REF_STEP ** 2 / 12.0, 0.0)))
         self.drift_lsb = float(x_lsb[-x_lsb.size // 20:].mean()
                                - x_lsb[:x_lsb.size // 20].mean())
 
@@ -273,6 +342,70 @@ class Stats:
         comparison against the datasheet's 2.8 mdps/rtHz.  Only meaningful if
         the spectrum really is flat in band -- check the PSD figure."""
         return self.sigma_dps / math.sqrt(self.fs / 2.0)
+
+
+# ==========================================================================
+# The exact-theory chain: eta(rho, phi) in closed form
+# ==========================================================================
+
+def eta_exact(rho: float, phi: float, K: int = 400) -> float:
+    r"""Added-power ratio for a TRUNCATING uniform quantiser, Gaussian input.
+
+    With u = x/Delta and Q(x)/Delta = floor(u), the quantisation error has an
+    exact Fourier representation -- the sawtooth series
+
+        e = floor(u) - u + 1/2 = sum_{k>=1} sin(2 pi k u) / (pi k)
+
+    so that Q = u - 1/2 + e and therefore
+
+        eta = 12 [ 2 Cov(u, e) + Var(e) ].
+
+    For Gaussian u with mean mu and standard deviation rho (both in units of
+    Delta), every expectation reduces to values of the characteristic function
+    on the quantiser's reciprocal lattice, g_k = exp(-2 pi^2 k^2 rho^2):
+
+        Cov(u, e) = 2 rho^2 sum_k g_k cos(2 pi k phi)
+        E[e]      = sum_k g_k sin(2 pi k phi) / (pi k)
+        E[e^2]    = sum_{k,l} (A_{|k-l|} - A_{k+l}) / (2 pi^2 k l),
+                    A_m = g_m cos(2 pi m phi),  A_0 = 1
+
+    phi is the fractional part of mu and is EDGE-referenced, because the
+    quantiser truncates. TN-12/13/14 reference mu to code centres, so their
+    quoted phase is phi - 0.5; evaluated at phi = 0.5 this function reproduces
+    TN-14 section 1.3 to three decimals at every tabulated rho, which is what
+    fixes the convention (TN-20 section 2.2).
+
+    The k = l terms contribute sum_k 1/(2 pi^2 k^2) -> 1/12 as K -> infinity,
+    which is the classical Delta^2/12; truncating the series therefore biases
+    eta low by about 12/(2 pi^2 K), and the tail is added back analytically
+    rather than by brute force.
+    """
+    k = np.arange(1, K + 1, dtype=np.float64)
+    g = np.exp(-2.0 * np.pi ** 2 * k ** 2 * rho ** 2)
+
+    cov = 2.0 * rho ** 2 * float(np.sum(g * np.cos(2.0 * np.pi * k * phi)))
+    e_mean = float(np.sum(g * np.sin(2.0 * np.pi * k * phi) / (np.pi * k)))
+
+    m = np.arange(0, 2 * K + 2, dtype=np.float64)
+    A = np.exp(-2.0 * np.pi ** 2 * m ** 2 * rho ** 2) * \
+        np.cos(2.0 * np.pi * m * phi)
+    A[0] = 1.0
+
+    ki = np.arange(1, K + 1)
+    kk, ll = np.meshgrid(ki, ki, indexing="ij")
+    e_sq = float(np.sum((A[np.abs(kk - ll)] - A[kk + ll])
+                        / (2.0 * np.pi ** 2 * kk * ll)))
+
+    # Analytic tail of the k = l diagonal, sum_{k>K} 1/(2 pi^2 k^2).
+    e_sq += 1.0 / (2.0 * np.pi ** 2 * K)
+
+    return 12.0 * (2.0 * cov + e_sq - e_mean ** 2)
+
+
+def eta_curve(rho, n_phi: int = 257):
+    """(phi, eta) over one full period, for plotting or for a likelihood."""
+    phi = np.linspace(0.0, 1.0, n_phi)
+    return phi, np.array([eta_exact(rho, p) for p in phi])
 
 
 # ==========================================================================
@@ -710,6 +843,194 @@ def cmd_allan(args) -> int:
     return 0
 
 
+SUMMARY_COLS = [
+    "file", "label", "slot", "odr_nom", "f_meas", "aaf", "offset_user",
+    "battery", "n", "minutes", "verify", "overflows", "ring_full",
+    "temp_span_mK", "temp_drift_mK", "gate_mK", "gate", "mu_drift_D",
+    "axis", "mu_D", "phi", "rho", "phi_ref", "rho_ref",
+    "eta", "eta_exact", "eta_resid", "sigma_mdps", "codes", "tail_ratio",
+    "line_Hz", "line_D", "line_pct_var", "rho_clean",
+    "adev_min_mdps", "adev_tau_s", "arw_deg_rthr",
+]
+
+
+def _summarise(path, screen_axis=0, fast=False):
+    """Every number that matters from one record, as rows -- one per axis.
+
+    Returns [] rather than raising if the file cannot be read: a summary run
+    over a night's output must not stop at the first bad record, because the
+    bad ones are usually the interesting ones.
+    """
+    try:
+        rec, fs, x, q = load(path)
+    except Exception as e:                                 # noqa: BLE001
+        return [{"file": os.path.basename(path), "label": f"LOAD FAILED: {e}"}]
+
+    hdr = rec.header
+    cfg = hdr.get("config") or {}
+    sen = hdr.get("sensor") or {}
+    pw = hdr.get("power") or {}
+    integ = hdr.get("integrity") or {}
+    gate = (hdr.get("gate") or {}).get("thermal_mk") or 0
+
+    t = rec.temp_c()
+    span_mk = (t.max() - t.min()) * 1000.0          # retained as a diagnostic
+    drift_mk = abs(drift_excursion(t, fs)) * 1000.0  # what R2 is actually about
+
+    # Line screen once, on one axis: Welch over a few million samples times
+    # three axes times sixteen records is minutes of CPU for information that
+    # is the same line in each channel.
+    try:
+        res = screen_lines(x[:, screen_axis], fs)
+        s0 = Stats(x[:, screen_axis], q[:, screen_axis], fs)
+        if res["lines"]:
+            L = res["lines"][0]
+            line_hz, line_d = L.f, L.amp_lsb
+            lp = sum(l.amp_lsb ** 2 / 2.0 for l in res["lines"])
+            line_pct = 100.0 * lp / max(s0.sigma ** 2, 1e-12)
+            rho_clean = math.sqrt(max(s0.sigma ** 2 - lp, 0.0))
+        else:
+            line_hz = line_d = line_pct = 0.0
+            rho_clean = s0.sigma
+    except Exception:                                      # noqa: BLE001
+        line_hz = line_d = line_pct = rho_clean = float("nan")
+
+    rows = []
+    for i, ax in enumerate(AXES):
+        s = Stats(x[:, i], q[:, i], fs)
+        # Allan is O(N x n_tau) and dominates the runtime on multi-million
+        # sample records -- 5M samples times 40 taus times three axes is a
+        # minute per file. It is not needed for the eta/rho/phi results, so it
+        # is skippable.
+        taus, devs = ((np.array([]), np.array([])) if fast else
+                      allan_dev(x[:, i] * DELTA_DPS, fs))
+        if devs.size:
+            j = int(np.argmin(devs))
+            k = int(np.argmin(np.abs(taus - 1.0)))
+            adev_min, adev_tau, arw = devs[j] * 1e3, taus[j], devs[k] * 60.0
+        else:
+            adev_min = adev_tau = arw = float("nan")
+
+        rows.append({
+            "file": os.path.basename(path),
+            "label": hdr.get("label", ""),
+            "slot": sen.get("slot", ""),
+            "odr_nom": cfg.get("odr_nominal_hz", ""),
+            "f_meas": round(fs, 3),
+            "aaf": cfg.get("aaf", ""),
+            "offset_user": cfg.get("offset_user_steps", 0),
+            "battery": pw.get("battery", ""),
+            "n": rec.n,
+            "minutes": round(rec.n / fs / 60.0, 2),
+            "verify": "ok" if rec.verify.ok else
+                      f"FAIL:{len(rec.verify.problems)}",
+            "overflows": integ.get("fifo_overflows", ""),
+            "ring_full": integ.get("ring_full", ""),
+            "temp_span_mK": round(span_mk, 1),
+            "temp_drift_mK": round(drift_mk, 1),
+            "gate_mK": gate,
+            # R2 is evaluated on the DRIFT, not the sample range -- see
+            # drift_excursion().  Records summarised before 29 July 2026 were
+            # gated on the range and several "failures" were the thermometer's
+            # own noise; re-run `summary` without --resume to restate them.
+            "gate": ("n/a" if not gate else
+                     ("pass" if drift_mk <= gate else "FAIL")),
+            # The direct measurement of the thing R2 exists to bound. TN-14
+            # s2.2 reasons temperature -> phase through the ZRO tempco; this
+            # skips the middle term and catches every cause of phase drift,
+            # including the mechanical and gradient-driven ones the tempco
+            # does not describe. Budget at ODR 25 is 0.021 Delta.
+            "mu_drift_D": round(abs(drift_excursion(x[:, i], fs)), 4),
+            "axis": ax,
+            "phi_ref": round(s.phi_ref, 4),
+            "rho_ref": round(s.rho_ref, 4),
+            "eta_exact": round(eta_exact(s.rho_ref, s.phi_ref), 4),
+            "eta_resid": round(s.eta - eta_exact(s.rho_ref, s.phi_ref), 4),
+            "mu_D": round(s.mu, 4),
+            "phi": round(s.phi, 4),
+            "rho": round(s.rho, 4),
+            "sigma_mdps": round(s.sigma_dps * 1e3, 4),
+            "eta": round(s.eta, 4),
+            "codes": s.n_codes,
+            "tail_ratio": round(s.tail_ratio, 3),
+            "line_Hz": round(line_hz, 3),
+            "line_D": round(line_d, 4),
+            "line_pct_var": round(line_pct, 2),
+            "rho_clean": round(rho_clean, 4),
+            "adev_min_mdps": round(adev_min, 4),
+            "adev_tau_s": round(adev_tau, 3),
+            "arw_deg_rthr": round(arw, 4),
+        })
+    return rows
+
+
+def cmd_summary(args) -> int:
+    """One table for a whole night. This is the thing to send for review."""
+    import csv
+    import glob as _glob
+
+    files = []
+    for spec in args.path:
+        if os.path.isdir(spec):
+            files += sorted(_glob.glob(os.path.join(spec, "*.sdat")))
+        else:
+            files += sorted(_glob.glob(spec))
+    if not files:
+        print("no .sdat files found")
+        return 2
+
+    out = args.out or os.path.join(
+        os.path.dirname(os.path.abspath(files[0])), "summary.csv")
+
+    # Resume support. A night's worth of multi-million-sample records takes
+    # minutes, and losing all of it because the last file failed is a bad
+    # trade for the few lines this costs.
+    done = set()
+    rows = []
+    if args.resume and os.path.exists(out):
+        for r in csv.DictReader(open(out, encoding="utf-8")):
+            rows.append(r)
+            done.add(r.get("file", ""))
+        print(f"  resuming: {len(done)} file(s) already summarised",
+              file=sys.stderr)
+
+    for i, f in enumerate(files, 1):
+        if os.path.basename(f) in done:
+            continue
+        print(f"  [{i}/{len(files)}] {os.path.basename(f)}", file=sys.stderr)
+        rows += _summarise(f, fast=args.fast)
+
+        with open(out, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=SUMMARY_COLS,
+                               extrasaction="ignore")
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+
+    # Compact console table: the columns you actually read first.
+    print()
+    # mu_D is in the table as well as phi. phi wraps at 1, so a shift of 10.24
+    # LSB is indistinguishable from 0.24 -- which is exactly the ambiguity that
+    # made the first OFFSET_USER check inconclusive. mu does not wrap.
+    print(f"{'label':<14}{'slot':>4}{'ODR':>6}{'aaf':>7}{'off':>4}{'ax':>3}"
+          f"{'mu_D':>11}{'rho':>8}{'rho_cln':>9}{'phi':>7}{'eta':>9}"
+          f"{'codes':>6}{'line_D':>8}{'gate':>6}{'verify':>8}")
+    for r in rows:
+        if "axis" not in r:
+            print(f"{r.get('label','?'):<14}  {r.get('file','')}")
+            continue
+        aaf = str(r["aaf"]).replace("Hz_default", "").replace("Hz_floor", "f")
+        print(f"{r['label']:<14}{r['slot']:>4}{r['odr_nom']:>6}{aaf:>7}"
+              f"{r['offset_user']:>4}{r['axis']:>3}{r['mu_D']:>11.4f}"
+              f"{r['rho']:>8.4f}{r['rho_clean']:>9.4f}{r['phi']:>7.4f}"
+              f"{r['eta']:>9.4f}{r['codes']:>6}{r['line_D']:>8.4f}"
+              f"{r['gate']:>6}{r['verify']:>8}")
+
+    print()
+    print(f"{len(files)} record(s) -> {out}")
+    return 0
+
+
 def cmd_all(args) -> int:
     os.makedirs(args.figdir, exist_ok=True)
     base = os.path.splitext(os.path.basename(args.file))[0]
@@ -883,6 +1204,17 @@ def main(argv=None) -> int:
     p.add_argument("file")
     p.add_argument("--alpha", type=float, default=0.01)
     p.set_defaults(func=cmd_trace)
+
+    p = sub.add_parser("summary",
+                       help="one CSV table for a whole night's records")
+    p.add_argument("path", nargs="+",
+                   help="a directory, or .sdat files / globs")
+    p.add_argument("-o", "--out", help="CSV path (default summary.csv)")
+    p.add_argument("--fast", action="store_true",
+                   help="skip Allan deviation; much faster on large records")
+    p.add_argument("--resume", action="store_true",
+                   help="keep rows already in the CSV and only add new files")
+    p.set_defaults(func=cmd_summary)
 
     p = sub.add_parser("compare",
                        help="internal vs external, using two specimens")

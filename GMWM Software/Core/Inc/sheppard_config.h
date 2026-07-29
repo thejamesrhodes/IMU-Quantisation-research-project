@@ -27,8 +27,8 @@ extern "C" {
 #define SHEPPARD_FW_NAME            "sheppard"
 #define SHEPPARD_FW_VERSION_MAJOR   0
 #define SHEPPARD_FW_VERSION_MINOR   2
-#define SHEPPARD_FW_VERSION_PATCH   14
-#define SHEPPARD_FW_VERSION_STR     "0.2.14"
+#define SHEPPARD_FW_VERSION_PATCH   17
+#define SHEPPARD_FW_VERSION_STR     "0.2.17"
 
 /* OPTIMISATION LEVEL IS A SCIENCE PARAMETER -- TN-16 open item 20.
  * Frozen at -Os from 28 July 2026, tag Stage-B-chained-dma-Os onwards. All
@@ -42,7 +42,7 @@ extern "C" {
 
 /* Free-text build tag. Change this when the build differs in any way that
    could touch the data, and log it in every record header. */
-#define SHEPPARD_BUILD_TAG          "Stage-C-battery-boot-Os"
+#define SHEPPARD_BUILD_TAG          "Stage-D-charger-autorun-Os"
 
 /* Directory holding records on the card. One definition, used by both the
    writer and the download commands. */
@@ -61,7 +61,7 @@ extern "C" {
 /* LED drive polarity. 1 = the pin sinks the cathode, so RESET lights the LED.
    If the indicators come out inverted after flashing -- breathing when they
    should be dark, dark while recording -- flip this and nothing else. */
-#define SHEPPARD_LED_ACTIVE_LOW     1
+#define SHEPPARD_LED_ACTIVE_LOW     0
 
 /* ==========================================================================
  * Flash layout

@@ -1,0 +1,30 @@
+\section{Introduction}
+\label{sec:intro}
+
+% ---------------------------------------------------------------------------
+% ~900 words. Argument order, one paragraph each:
+%
+%  1. Stochastic IMU calibration fits N, B, K from an Allan or wavelet
+%     analysis and transfers them across configuration by a sqrt(ODR) rule.
+%  2. That rule is stated as a CONDITION in Kalibr's own documentation --
+%     requiring ideal decimation -- not as a validated result.
+%  3. The standards construct that WOULD model register quantisation, the
+%     IEEE-952 angle-quantisation term Q, describes angle-INCREMENT outputs.
+%     Wrong architecture for a rate register.
+%  4. So for a rate register the term is unmodelled, lands on the -1/2 family,
+%     and is absorbed silently into fitted ARW.
+%  5. Contributions, four bullets, in Concept Note v2.3 Z.3's survivability
+%     order (strongest first).
+%
+% WHAT IS NOT CLAIMED -- one sentence each, IN the introduction, not buried:
+%   - not a new quantiser theory (Bennett, Sripad-Snyder, Widrow-Kollar)
+%   - scale factor / misalignment are a different family (IMU-TK)
+%   - the effect vanishes at high rho; this is a low-rho paper
+% ---------------------------------------------------------------------------
+
+\gap{Kalibr verbatim quote. Concept Note v2.3 Z.5 names this the paper's
+weakest structural point and Critical Analysis v2.1 Z.1 makes it a condition
+of publishability. Half a day at a desk. Until it is here, \cref{sec:conseq}
+overreaches.}
+
+\todo{Write.}

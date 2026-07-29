@@ -1,0 +1,60 @@
+\section{Results}
+\label{sec:results}
+
+% ~1400 words. ORDER MATTERS: architecture first, because everything
+% downstream is conditional on which quantiser this is.
+%
+% Split the section explicitly into CONFIRMATORY and EXPLORATORY. See
+% PREREGISTRATION.md. A reader must be able to tell which is which without
+% reconstructing the project's history.
+
+\subsection{Architecture identification}
+\label{sec:arch}
+% CONFIRMATORY. V0.4 was scored against five pre-specified outcomes
+% {rounding, truncation, RPDF, TPDF, neither}.
+%
+% gyro16 == gyro20 >> 4 exactly. \vzeroFourTotal{} of \vzeroFourTotal{}
+% discriminating samples, three ODR spanning 40x, zero ambiguous.
+% This is bit-exact and needs no statistics at all -- which is why rule R6's
+% likelihood machinery is not invoked (see PREREGISTRATION.md, deviation 4).
+\todo{Write.}
+
+\subsection{Added power against dither ratio}
+% \nOdrPoints{} axis-measurements, two specimens, rho over \rhoDecades{}
+% decades. Residual RMS \odrResidRMS{} against exact theory.
+\todo{Write. \cref{fig:etarho}.}
+
+\subsection{Added power against phase: the causal manipulation}
+\label{sec:phasesweep}
+% THE result. One specimen, one ODR, one configuration; the only thing that
+% changes between records is a number written to a trim register.
+% \nPhasePoints{} measurements, eta from \etaRangeLo{} to \etaRangeHi{},
+% residual RMS \phaseResidRMS{} with ZERO free parameters.
+%
+% This is what answers Objection #14 part 2 (Objections v2.1 Z.2): phi is
+% MANIPULATED, not merely observed.
+\todo{Write.}
+
+\begin{figure}[t]\centering
+  \includegraphics[width=\linewidth]{fig7_phase_sweep.png}
+  \caption{\todo{Controlled phase sweep. Curve is exact theory; nothing
+  fitted.}}
+  \label{fig:phasesweep}
+\end{figure}
+
+\subsection{An independent channel}
+% Code occupancy, max discrepancy \histMaxDisc{}, nothing fitted. A
+% DISTRIBUTIONAL statistic sharing no algebra with eta.
+\todo{Write. Figure to supplementary: fig15\_code\_histograms.png}
+
+\subsection{The Allan domain}
+% The absence of a -1 slope, with both reference lines anchored ON the data
+% so the only thing being compared is the slope.
+\todo{Write.}
+
+\begin{figure}[t]\centering
+  \includegraphics[width=\linewidth]{fig10_allan_family.png}
+  \caption{\todo{The quantisation term is on the $-1/2$ family. No
+  IEEE-952 $Q$ term appears.}}
+  \label{fig:allan}
+\end{figure}

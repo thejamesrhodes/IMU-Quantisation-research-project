@@ -66,6 +66,46 @@ extern "C" {
 #define ICM_GYRO_CFG_STATIC4     0x0DU   /* DELTSQR[7:0]                       */
 #define ICM_GYRO_CFG_STATIC5     0x0EU   /* [7:4] BITSHIFT, [3:0] DELTSQR[11:8]*/
 
+/* --- bank 4 (OFFSET_USER) --------------------------------------------------
+ *
+ * The digital phase ladder of TN-13 section 4.3. Gyro offsets are 12-bit
+ * signed, packed three-and-a-half registers wide because X and Y share the
+ * nibbles of OFFSET_USER1.
+ *
+ *   OFFSET_USER0  GYRO_X_OFFUSER[7:0]
+ *   OFFSET_USER1  GYRO_Y_OFFUSER[11:8] << 4 | GYRO_X_OFFUSER[11:8]
+ *   OFFSET_USER2  GYRO_Y_OFFUSER[7:0]
+ *   OFFSET_USER3  GYRO_Z_OFFUSER[7:0]
+ *   OFFSET_USER4  ACCEL_X_OFFUSER[11:8] << 4 | GYRO_Z_OFFUSER[11:8]
+ *
+ * RESOLUTION IS THE WHOLE QUESTION. DS-000347 gives 1/32 dps per step over
+ * +/-64 dps, so one step is
+ *
+ *     (1/32) / (2000/32768) = 0.512 Delta   exactly
+ *
+ * which is COARSER than one quantiser LSB. A naive 12-step ladder therefore
+ * does not sweep phase -- it lands on two clusters. But 0.512 = 64/125, so
+ * k steps give phase (64k mod 125)/125, and 125 distinct phases are reachable
+ * at a spacing of 0.008 Delta. Choosing k = 84m mod 125 hits phase m/125,
+ * because 84 is the inverse of 64 modulo 125. That turns a coarse register
+ * into a fine phase control, and it is why the ladder is specified as a list
+ * of step counts rather than a uniform increment.
+ *
+ * The 1/32 dps figure must be CONFIRMED on hardware before the ladder is
+ * trusted: apply a known step, measure the shift in mu from the 19-bit stream,
+ * and check it against 0.512 Delta. That measurement also tests TN-13's
+ * assumption that the offset is applied pre-register on the fine lattice,
+ * which is the ladder's entire premise.
+ * -------------------------------------------------------------------------- */
+#define ICM_OFFSET_USER0         0x77U
+#define ICM_OFFSET_USER1         0x78U
+#define ICM_OFFSET_USER2         0x79U
+#define ICM_OFFSET_USER3         0x7AU
+#define ICM_OFFSET_USER4         0x7BU
+
+/** Nominal step size in units of the 16-bit LSB. Verify before relying on it. */
+#define ICM_OFFSET_STEP_DELTA    0.512
+
 /* --- bank 2 (accel AAF) ---------------------------------------------------- */
 #define ICM_ACCEL_CFG_STATIC2    0x03U   /* [6:1] ACCEL_AAF_DELT, [0] AAF_DIS  */
 #define ICM_ACCEL_CFG_STATIC3    0x04U
@@ -208,6 +248,28 @@ int  icm_write8(bus_slot_t slot, uint8_t reg, uint8_t val);
 
 /** Write then read back; returns -1 and logs if the read-back disagrees. */
 int  icm_write8_verify(bus_slot_t slot, uint8_t reg, uint8_t val);
+
+/**
+  * @brief  Apply a gyro OFFSET_USER step to all three axes, in bank 4.
+  *
+  *         Written to X, Y and Z together: the phase axis is a property of the
+  *         measurement rather than of one channel, and leaving two axes at zero
+  *         would mean the three replicates were no longer replicates.
+  *
+  * @param  steps  12-bit signed, -2048..2047. One step is nominally 0.512 of a
+  *                16-bit LSB -- see the note above ICM_OFFSET_USER0.
+  * @retval 0 on success with read-back verified, -1 otherwise.
+  */
+int  icm_set_gyro_offset(bus_slot_t slot, int16_t steps);
+
+/**
+  * @brief  Step count landing closest to a target phase.
+  *
+  *         Solves (64k mod 125)/125 ~= num/den using the inverse of 64 modulo
+  *         125. Exposed so the console can print the ladder and a reviewer can
+  *         check it against the arithmetic documented at ICM_OFFSET_USER0.
+  */
+int16_t icm_offset_for_phase(int num, int den);
 
 /** Register the `icm` and `fifo` console commands. */
 void icm_console_init(void);

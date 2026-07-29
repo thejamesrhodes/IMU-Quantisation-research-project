@@ -1,0 +1,120 @@
+% ===========================================================================
+% Rate-register quantisation in MEMS gyroscopes
+%
+% BUILD:   latexmk -pdf main.tex          (or: press Ctrl+Alt+B in VS Code)
+% CLEAN:   latexmk -C
+%
+% This file compiles TODAY with the stock `article` class so that nothing
+% blocks you from writing. Switch to the journal class at submission by
+% changing ONE line -- see \documentclass below.
+%
+% NOTHING IN THIS FILE IS THE PAPER. Every section is a stub carrying the
+% argument order and the evidence it has to cite. Prose goes in the section
+% files under sections/.
+% ===========================================================================
+
+% --- TARGET CLASS ----------------------------------------------------------
+% Draft (works out of the box):
+\documentclass[11pt,a4paper]{article}
+%
+% IOP Measurement Science and Technology -- download iopart.cls from
+%   https://publishingsupport.iopscience.iop.org/questions/latex-template/
+% and put it beside this file, then use:
+% \documentclass[12pt]{iopart}
+%
+% IEEE TIM -- IEEEtran.cls ships with TeX Live:
+% \documentclass[journal]{IEEEtran}
+%
+% Pick the target EARLY. Column width sets figure aspect ratios, and
+% switching after the figures are drawn means redrawing all of them.
+% ---------------------------------------------------------------------------
+
+\usepackage[T1]{fontenc}
+% lmodern is not cosmetic. With T1 encoding and no scalable font family you
+% get bitmapped Type 3 fonts in the PDF, which look poor on screen and which
+% several publishers reject outright at submission. It also stops microtype
+% failing with "auto expansion is only possible with scalable fonts".
+\usepackage{lmodern}
+\usepackage[utf8]{inputenc}
+\usepackage[british]{babel}
+\usepackage{geometry}
+\geometry{margin=25mm}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}          % \toprule \midrule \bottomrule -- never \hline
+\usepackage{siunitx}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+\usepackage{microtype}
+
+\graphicspath{{../Figures/}}   % figures are NOT copied; they are referenced
+                               % where figures.py writes them, so a rerun
+                               % updates the PDF
+
+% --- units and symbols -----------------------------------------------------
+\sisetup{range-units=single, per-mode=symbol}
+\DeclareSIUnit{\dps}{\degree\per\second}
+\DeclareSIUnit{\mdps}{\milli\degree\per\second}
+
+\newcommand{\Dlsb}{\Delta}                 % the 16-bit register LSB
+\newcommand{\Dref}{\Delta'}                % the 20-bit field lattice, D/8
+\newcommand{\rhod}{\rho}                   % sigma / Delta
+\newcommand{\phase}{\varphi}               % sub-code phase, EDGE-referenced
+\newcommand{\etaq}{\eta}                   % added-power ratio
+
+% --- generated numbers -----------------------------------------------------
+% numbers.tex is written by tools/make_numbers.py from summary.csv.
+% DO NOT TYPE A NUMBER INTO THE PROSE. Use the macros. If a rerun changes a
+% value, the paper changes with it; if you type it, it silently goes stale,
+% and this project has already moved a headline residual from 0.393 to 0.018.
+\input{numbers.tex}
+
+% --- draft aids, remove before submission ----------------------------------
+\usepackage{xcolor}
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\gap}[1]{\textcolor{orange}{\textbf{[GAP: #1]}}}
+\newcommand{\expl}[1]{\textcolor{blue}{\textbf{[EXPLORATORY: #1]}}}
+
+% ===========================================================================
+
+\title{Rate-Register Quantisation in MEMS Gyroscopes:\\
+       Exact Statistics of an Unmeasured Term in Fitted Angle Random Walk}
+\author{J. Rhodes}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\todo{$\sim$200 words. Order: practice $\rightarrow$ gap $\rightarrow$ what was
+measured $\rightarrow$ result $\rightarrow$ consequence. Lead with the transfer
+rule, not with quantisation theory: the reader must know what breaks before
+they can care why. Must contain ``truncating rate register'', ``$-1/2$ slope'',
+``two measured parameters'', ``no free parameters'', and one number ---
+suggested \etaRangeLo{} to \etaRangeHi{}, or the \arwSpan{} span in fitted ARW.}
+\end{abstract}
+
+\input{sections/01_introduction}
+\input{sections/02_background}
+\input{sections/03_theory}
+\input{sections/04_method}
+\input{sections/05_results}
+\input{sections/06_consequences}
+\input{sections/07_limitations}
+\input{sections/08_conclusion}
+
+\section*{Data and code availability}
+\todo{Zenodo DOI. All \nRecords{} \texttt{.sdat} records byte-for-byte, the
+HDF5 conversions and their converter, the analysis code at its tagged commit,
+\texttt{summary.csv}, and a SHA-256 manifest.}
+
+\section*{Pre-registration and deviations}
+\todo{One paragraph, and it must be honest about which parts are which. See
+\texttt{PREREGISTRATION.md} in the repository root. The deviations table goes
+in the supplementary material.}
+
+\bibliographystyle{unsrt}   % iopart-num for MST; IEEEtran for TIM
+\bibliography{references}
+
+\end{document}

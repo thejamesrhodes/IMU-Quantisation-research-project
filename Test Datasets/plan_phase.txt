@@ -1,0 +1,107 @@
+# Sheppard -- OFFSET_USER phase sweep. Upload, then Arm.
+#
+#   warmup <secs>
+#   step  <label> <secs> <odr> <slot> <def|floor> <offset>    <settle>
+#
+# 4.4 h, about 55 MB. Analyse with:
+#   python analyse.py summary "..\..\Test Datasets" -o summary.csv --fast
+#   python figures.py summary.csv -o "..\..\Figures"
+# --------------------------------------------------------------------
+#
+# WHAT THIS IS
+#
+# The causal phase manipulation. TN-20 fig2 already shows eta spanning
+# -0.24 to +2.42 against the exact theory, but those phases were an
+# ACCIDENT -- the two specimens happened to sit at different bias
+# phases. An accident is not a manipulation, and Objection #14 part 2
+# (Anticipated Reviewer Objections v2.1 Z.2) rests on phi being
+# manipulated, not merely observed. This is that manipulation.
+#
+# TN-21 settled the step size at s = 0.499513 +/- 0.000073 Delta/step.
+# Because s is NOT exactly 0.5, even step counts precess by 2*eps =
+# 0.00097 Delta each and sweep the whole period in 1026 steps. The
+# register is a vernier.
+#
+# THE COMMANDED PHASE IS NOT KNOWN, AND DOES NOT NEED TO BE
+#
+# eps = 0.000487 is known to 15%, so sigma_phi = k*SE(s) reaches
+# 0.13 Delta at k = 1796 -- six times the R2 phase budget. Solving k for
+# a target phase would therefore be a fiction.
+#
+# It does not matter. Rule R6 evaluates eta at the MEASURED (rho, phi),
+# and phi is measured per record from the 19-bit mean to SE 0.003-0.005
+# Delta. The register's job is to MOVE the phase, not to place it. So
+# the ladder below steps UNIFORMLY IN k: a wrong eps stretches or
+# compresses the sweep but cannot cluster it, whereas a ladder solved
+# for target phases bakes the 15% error straight into the design.
+#
+# ORDER IS BIT-REVERSED, NOT ASCENDING
+#
+# Consecutive records sit far apart in k, so corr(phi, time) = -0.02
+# instead of +1. Any residual drift over the night is then orthogonal to
+# the phase axis rather than confounded with it. This is the same lesson
+# as the descending-ODR error of TN-20 s2.6: never let the independent
+# variable track the clock.
+#
+# WHY ODR 50
+#
+# |d(eta)/d(phi)| is 12.2 at ODR 25, 8.6 at 50, 4.7 at 100 (TN-14 s2.2),
+# against record lengths of 1200 / 600 / 300 s. ODR 50 keeps 70% of the
+# sensitivity for half the time. ODR 25 would be 8 h for one specimen.
+#
+# WHAT LIMITS THE RESOLUTION -- and it is not the register
+#
+# SE(mu) per record is 0.004 Delta, but bias-instability wander within a
+# record is 0.006-0.051 Delta (TN-22 s4). So the usable phase spacing is
+# ~0.02-0.05 Delta: about 30 distinct phases per period. The register
+# offers 2048. Sixteen points at 0.065 Delta spacing is comfortably
+# inside what the sensor can resolve, and adding more would buy nothing.
+# --------------------------------------------------------------------
+
+# Long, because the sweep must start from a settled die: the 6156 mK/h
+# in r358768 was a board handled minutes earlier, against 162 mK/h once
+# settled (TN-22 s6).
+warmup 900
+
+# --------------------------------------------------------------------
+# Slot 2 ladder calibration -- 6 min. eps is a per-part quantity (TN-21
+# s4 attributes the residual to per-axis scale-factor trim), so slot 2's
+# sweep must not assume slot 1's number. Run this even if the sweep
+# below is slot 1 only: it is the input to slot 2's plan.
+# --------------------------------------------------------------------
+step p2cal_0a     60  1000  2  def      0   30
+step p2cal_1000   60  1000  2  def   1000   15
+step p2cal_0b     60  1000  2  def      0   15
+step p2cal_2000   60  1000  2  def   2000   15
+step p2cal_0c     60  1000  2  def      0   15
+
+# --------------------------------------------------------------------
+# The sweep. k = 0..1920 in strides of 128, bit-reversed in time.
+# Expected phases, in run order:
+#   0.000 0.501 0.751 0.252 0.875 0.377 0.626 0.127
+#   0.938 0.439 0.688 0.190 0.813 0.314 0.564 0.065
+# Span 0.938 of a period, largest gap 0.065 Delta. If slot 1's eps is
+# 15% low the largest gap opens to 0.205 -- still a sweep, still usable.
+# --------------------------------------------------------------------
+step ph_k0000    600    50  1  def     0  300
+step ph_k1024    600    50  1  def  1024  300
+step ph_k0512    600    50  1  def   512  300
+step ph_k1536    600    50  1  def  1536  300
+step ph_k0256    600    50  1  def   256  300
+step ph_k1280    600    50  1  def  1280  300
+step ph_k0768    600    50  1  def   768  300
+step ph_k1792    600    50  1  def  1792  300
+step ph_k0128    600    50  1  def   128  300
+step ph_k1152    600    50  1  def  1152  300
+step ph_k0640    600    50  1  def   640  300
+step ph_k1664    600    50  1  def  1664  300
+step ph_k0384    600    50  1  def   384  300
+step ph_k1408    600    50  1  def  1408  300
+step ph_k0896    600    50  1  def   896  300
+step ph_k1920    600    50  1  def  1920  300
+
+# --------------------------------------------------------------------
+# For slot 2's night: change the slot field to 2 and re-derive the k
+# stride from its own eps, which p2cal above measures. If slot 2's eps
+# comes out near slot 1's, the same k list works unchanged.
+# --------------------------------------------------------------------

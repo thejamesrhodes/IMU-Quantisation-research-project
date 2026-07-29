@@ -83,6 +83,49 @@ static int icm_bank(bus_slot_t slot, uint8_t bank)
   return icm_write8(slot, ICM_REG_BANK_SEL, (uint8_t)(bank & 0x07U));
 }
 
+/* ==========================================================================
+ * OFFSET_USER -- the digital phase ladder (TN-13 section 4.3)
+ * ========================================================================== */
+
+static int icm_rmw(bus_slot_t slot, uint8_t reg, uint8_t mask, uint8_t val);
+
+int16_t icm_offset_for_phase(int num, int den)
+{
+  /* One step is 0.512 = 64/125 of a 16-bit LSB, so k steps give phase
+     (64k mod 125)/125. Inverting: to reach phase m/125, take k = 84m mod 125,
+     since 64 * 84 = 5376 = 43*125 + 1, i.e. 84 is the inverse of 64 mod 125.
+     Round the requested fraction onto the 125-point lattice first. */
+  if (den <= 0) { return 0; }
+  int m = (int)(((long)num * 125L + (long)den / 2L) / (long)den) % 125;
+  if (m < 0) { m += 125; }
+  return (int16_t)((84 * m) % 125);
+}
+
+int icm_set_gyro_offset(bus_slot_t slot, int16_t steps)
+{
+  if ((steps > 2047) || (steps < -2048)) { return -1; }
+
+  uint16_t v = (uint16_t)((uint16_t)steps & 0x0FFFU);   /* 12-bit two's cpl */
+  uint8_t lo = (uint8_t)(v & 0xFFU);
+  uint8_t hi = (uint8_t)((v >> 8) & 0x0FU);
+
+  if (icm_bank(slot, 4U) != 0) { return -1; }
+
+  int rc = 0;
+  /* X low, then the shared nibble register carrying X[11:8] and Y[11:8],
+     then Y low, Z low, and finally Z[11:8] in the low nibble of USER4 --
+     whose high nibble belongs to ACCEL_X and must not be disturbed. */
+  rc |= icm_write8_verify(slot, ICM_OFFSET_USER0, lo);
+  rc |= icm_write8_verify(slot, ICM_OFFSET_USER1,
+                          (uint8_t)((hi << 4) | hi));
+  rc |= icm_write8_verify(slot, ICM_OFFSET_USER2, lo);
+  rc |= icm_write8_verify(slot, ICM_OFFSET_USER3, lo);
+  rc |= icm_rmw(slot, ICM_OFFSET_USER4, 0x0FU, hi);
+
+  (void)icm_bank(slot, 0U);
+  return (rc == 0) ? 0 : -1;
+}
+
 /* Read-modify-write. Several fields in 0x51/0x53 carry required non-zero
    values, so a blind full-register write clobbers them (TN-16 section 5.3). */
 static int icm_rmw(bus_slot_t slot, uint8_t reg, uint8_t mask, uint8_t val)

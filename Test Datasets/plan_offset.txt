@@ -1,0 +1,102 @@
+# Sheppard -- OFFSET_USER step size. Upload, then Arm.
+#
+#   warmup <secs>
+#   step  <label> <secs> <odr> <slot> <def|floor> <offset>    <settle>
+#   phase <label> <secs> <odr> <slot> <def|floor> <num>/<den> <settle>
+#
+# 16 min, 11 MB. Analyse with:
+#   python offset_fit.py "..\..\Test Datasets" --glob "*_off_*.sdat"
+#
+# That pattern picks up this run's labels (off_0a, off_1000, ...) and
+# deliberately excludes the 28 July trio (off0, off1, off5), which was
+# taken at a different time and cannot be pooled with it.
+# --------------------------------------------------------------------
+#
+# WHAT THIS SETTLES
+#
+# TN-20 section 2.5. One OFFSET_USER step is either 0.512 Delta -- the
+# datasheet figure, (1/32 dps)/(2000/32768 dps), confirmed against
+# DS-000347 Rev 1.6 sections 5.4 and 17.18-17.22 -- or 0.500 Delta,
+# half a 16-bit LSB. The 28 July trio gave 0.503 +/- 0.006 over four
+# steps: 1.5 sigma from one, 0.5 sigma from the other, so nothing.
+#
+# If it is 0.500 the ladder is DEGENERATE. Even step counts land on
+# phi = 0, odd on phi = 0.5, and the 125 distinct phases of TN-20
+# section 4.6 collapse to two. The digital phase axis dies and the
+# thermal ramp becomes the only way to manipulate phi.
+#
+# WHY THE FIRST ATTEMPT FAILED, AND WHAT IS DIFFERENT
+#
+# 1. The lever arm was 4 steps = 0.048 Delta of separation. Here it
+#    is 2000 steps = 24 Delta. The register is 12-bit signed over
+#    +/-64 dps, so 2000 steps = 62.5 dps, in range with 2.3% spare.
+#
+# 2. Thermal drift was unmodelled and LARGER THAN THE EFFECT. The ZRO
+#    tempco is +/-5 mdps/K (DS-000347 Rev 1.6 Table 1), so
+#    dmu/dT = 5/61.035 = 0.0819 Delta/K, and each 28 July record
+#    spanned 0.72-0.79 K -- about 0.06 Delta of nuisance against
+#    0.048 Delta of signal. The four returns to k = 0 below break the
+#    collinearity between step count and die temperature so that
+#    offset_fit.py can regress mu on both. Without them the fit
+#    cannot tell a step from a warm-up.
+#
+# 3. Three records against three fit parameters left zero degrees of
+#    freedom. Nine records leave six, so the residuals become a
+#    linearity test rather than being identically zero.
+#
+# THIRD HYPOTHESIS, stated before the data arrives: 0.512 Delta is
+# 8.192 codes of the 20-bit field (Delta = 16 codes, TN-20 4.4). That
+# is NOT an integer, so if the offset is summed at the 20-bit word the
+# step MUST be a whole number of codes -- 8, i.e. exactly 0.500 Delta.
+# A result of 0.500 is therefore not a datasheet error; it locates
+# where in the chain the offset is injected. 0.512 means the sum
+# happens deeper, at finer precision than the FIFO word exposes.
+#
+# READ mu, NOT phi. phi wraps at 1, so a 1024 Delta shift is
+# indistinguishable from 0. mu does not wrap.
+# --------------------------------------------------------------------
+
+# The board self-heats. Short only because the drift is modelled
+# rather than gated. If the board has been idle and cold, raise to 900.
+warmup 300
+
+# --------------------------------------------------------------------
+# The ladder. The k = 0 returns at positions 4, 7 and 9 are the drift
+# brackets and are the reason the fit is identifiable. Do not delete
+# them to save time.
+#
+# Separation between the hypotheses is 0.012 Delta per step:
+#   k=1     0.012 Delta   below the noise; a presence check only
+#   k=20    0.24  Delta   ~30 sigma on the raw sigma, ~44 on clean
+#   k=125   1.5   Delta   also a direct phi check: 0.512 returns phi
+#                         to 0, 0.500 puts it at 0.5
+#   k=1000  12    Delta   the precision point; s to ~5e-6 Delta/step
+#   k=2000  24    Delta   linearity and clamp check, 97.7% of range
+#
+# SE(mu) over 60 s at ODR 1000, AAF default: 0.0039 Delta on the
+# line-corrected sigma, 0.0055 on the raw. Read the step size off
+# k=1000. k=2000 exists to catch a clamp, which would look like a
+# small step and mimic 0.500.
+# --------------------------------------------------------------------
+step off_0a      60  1000  1  def     0   15
+step off_1       60  1000  1  def     1   15
+step off_20      60  1000  1  def    20   15
+step off_0b      60  1000  1  def     0   15
+step off_125     60  1000  1  def   125   15
+step off_1000    60  1000  1  def  1000   15
+step off_0c      60  1000  1  def     0   15
+step off_2000    60  1000  1  def  2000   15
+step off_0d      60  1000  1  def     0   15
+
+# --------------------------------------------------------------------
+# OPTIONAL, +6 min: slot 2. The offset register is per-part and the
+# two specimens already differ by 0.4% in oscillator rate, so
+# agreement is a real replicate rather than a formality. Uncomment if
+# there is bench time; the reduced ladder is enough once slot 1 has
+# established linearity.
+# --------------------------------------------------------------------
+# step off_s2_0a   60  1000  2  def     0   15
+# step off_s2_1000 60  1000  2  def  1000   15
+# step off_s2_0b   60  1000  2  def     0   15
+# step off_s2_2000 60  1000  2  def  2000   15
+# step off_s2_0c   60  1000  2  def     0   15

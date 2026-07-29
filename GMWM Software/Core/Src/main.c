@@ -50,6 +50,7 @@ void validate_console_init(void);
 void storage_console_init(void);
 void xfer_console_init(void);
 #include "led.h"
+#include "seq.h"
 void sampler_on_int(uint16_t gpio_pin);   /* sampler.h; declared to avoid
                                              pulling in bus.h/record.h here */
 #include <stdarg.h>
@@ -407,6 +408,9 @@ int main(void)
      timebase_init(). */
   led_init();
 
+  /* Registers `seq`. */
+  seq_console_init();
+
   HAL_Delay(500);
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, GPIO_PIN_RESET);
@@ -443,6 +447,12 @@ int main(void)
   fs_test();
 
   console_printf("boot self-test done. `help` for commands.\r\n");
+
+  /* Battery boot with an armed plan runs the campaign now. Returns immediately
+     when VBUS is present, so plugging in to offload data can never start one.
+     Placed after the self-test so the sensors are configured and the card is
+     known good before anything unattended begins. */
+  seq_autorun_if_armed();
   /* USER CODE END 2 */
 
   /* Infinite loop */

@@ -477,36 +477,55 @@ static void cmd_rec(int argc, char **argv)
     return;
   }
 
-  const char *label = argv[1];
-  long secs = strtol(argv[2], NULL, 10);
-  long hz   = (argc >= 4) ? strtol(argv[3], NULL, 10) : 100;
-  long sl   = (argc >= 5) ? strtol(argv[4], NULL, 10) : 1;
+  storage_rec_t p = {
+    .label   = argv[1],
+    .secs    = strtol(argv[2], NULL, 10),
+    .odr_hz  = (argc >= 4) ? strtol(argv[3], NULL, 10) : 100,
+    .slot1   = (argc >= 5) ? (int)strtol(argv[4], NULL, 10) : 1,
+    .aaf_floor = 0U,
+    .offset_user = 0,
+    .delay_s = (argc >= 7) ? strtol(argv[6], NULL, 10) : 0,
+  };
 
-  uint8_t aaf_floor = 0U;
   if (argc >= 6)
   {
-    if      (strcmp(argv[5], "floor") == 0) { aaf_floor = 1U; }
-    else if (strcmp(argv[5], "def")   == 0) { aaf_floor = 0U; }
+    if      (strcmp(argv[5], "floor") == 0) { p.aaf_floor = 1U; }
+    else if (strcmp(argv[5], "def")   == 0) { p.aaf_floor = 0U; }
     else
     {
       console_printf("rec: aaf must be 'def' (585 Hz) or 'floor' (42 Hz)\r\n");
       return;
     }
   }
-  long delay_s = (argc >= 7) ? strtol(argv[6], NULL, 10) : 0;
+
+  (void)storage_record(&p);
+}
+
+/* The record itself, callable from the console or from the sequencer. Split
+   out so `seq` drives exactly the same code path as a hand-typed `rec` --
+   an unattended run must not be able to differ from the one you tested. */
+int storage_record(const storage_rec_t *p)
+{
+  const char *label = p->label;
+  long secs = p->secs;
+  long hz   = p->odr_hz;
+  long sl   = p->slot1;
+  uint8_t aaf_floor = p->aaf_floor;
+  long delay_s = p->delay_s;
+
   if (delay_s < 0 || delay_s > 3600L) { delay_s = 0; }
 
   if (secs < 1 || secs > 43200L || sl < 1 || sl > 4 ||
       icm_odr_code(hz) == 0xFFU)
   {
-    console_printf("usage: rec <label> <1..43200 s> "
+    console_printf("rec: bad parameters: <1..43200 s> "
                    "[25|50|100|200|500|1000|8000] [1..4] "
                    "[def|floor] [0..3600]\r\n");
-    return;
+    return -1;
   }
 
   bus_slot_t slot = (bus_slot_t)(sl - 1);
-  if (icm_probe(slot) != 0) { return; }
+  if (icm_probe(slot) != 0) { return -1; }
 
   if (delay_s > 0)
   {
@@ -552,7 +571,17 @@ static void cmd_rec(int argc, char **argv)
   if (icm_configure(slot, &icfg) != 0)
   {
     console_printf("rec: configure failed\r\n");
-    return;
+    return -1;
+  }
+
+  /* OFFSET_USER phase step (TN-13 section 4.3). Applied before the FIFO is
+     armed so the whole record sits at one phase. Verified by read-back, and
+     the step count goes into the header -- an offset that silently failed to
+     take would otherwise look like a null result for the phase axis. */
+  if (icm_set_gyro_offset(slot, p->offset_user) != 0)
+  {
+    console_printf("rec: OFFSET_USER write failed\r\n");
+    return -1;
   }
 
   /* TMST_RES lives in bit 3; read-modify-write, because TMST_EN in bit 0 is
@@ -573,7 +602,7 @@ static void cmd_rec(int argc, char **argv)
   record_cfg_t rcfg = {
     .label = label, .slot = slot, .odr_hz = hz, .fsr_dps = 2000,
     .ui_filt_bw = 0U, .aaf_floor = aaf_floor, .tmst_res_us = tmst_res,
-    .watermark = icfg.watermark, .offset_user = 0,
+    .watermark = icfg.watermark, .offset_user = p->offset_user,
     /* VBUS is sensed on PB13, so "which supply was this record taken on" is
        recorded rather than assumed. It matters: the USB cable is both a power
        path and a mechanical tether, and a record taken on battery is a
@@ -587,11 +616,11 @@ static void cmd_rec(int argc, char **argv)
   char runid[20];
   snprintf(runid, sizeof runid, "r%lu", (unsigned long)HAL_GetTick());
 
-  if (storage_open(&rcfg, runid) != 0) { return; }
+  if (storage_open(&rcfg, runid) != 0) { return -1; }
   if (sampler_start(slot, icfg.watermark, hz) != 0)
   {
     (void)storage_close(0, 0, 0, 0, 0);
-    return;
+    return -1;
   }
 
   console_printf("rec: %ld s at %ld Hz, watermark %u B, gate %lu mK, "
@@ -737,17 +766,29 @@ static void cmd_rec(int argc, char **argv)
     }
   }
 
+  /* Verdict for the caller. The sequencer needs to know whether a step
+     produced admissible data without re-parsing the console text. */
+  int verdict = 0;
+  if (expected != 0U)
+  {
+    if ((got + (expected / 50U)) < expected) { verdict = -2; }  /* data loss */
+    else if (ss.overflows != 0U)             { verdict = -3; }  /* overflow  */
+    else if (gate_broken)                    { verdict = -4; }  /* R2 gate   */
+  }
+  if (verdict != 0) { led_fault(); }
+
   /* n_gaps stays in packets. The overflow count is a different quantity with
      different units -- an unknown number of packets lost per event -- so
      storage_close() reads it from the sampler and writes it to the header as
      its own field. A reader must be able to reject a record from the file
      alone, without reference to the session log. */
-  (void)storage_close(gaps, t0, t1, 0, 0);
+  (void)storage_close(gaps, t0, t1, t_span_lo, t_span_hi);
+  return verdict;
 }
 
 static const console_cmd_t s_sto_cmds[] = {
   { "mount", "mount the SD card and report free space",           cmd_mount },
-  { "rec",   "rec <label> <secs> [odr] [slot] - log a .sdat record", cmd_rec },
+  { "rec",   "rec <label> <secs> [odr] [slot] [def|floor] [delay]", cmd_rec },
 };
 
 void storage_console_init(void)

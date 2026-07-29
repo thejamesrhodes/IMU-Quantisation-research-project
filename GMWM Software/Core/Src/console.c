@@ -239,7 +239,12 @@ static int rx_get(uint8_t *out)
  * Command dispatch
  * ========================================================================== */
 
-#define CONSOLE_MAX_ARGS 8
+/* 12, not 8: a sequencer plan line arrives as
+     seq add step <label> <secs> <odr> <slot> <aaf> <offset> <settle>
+   which is ten tokens. At eight the tail was silently dropped, and a plan
+   whose settle time vanished would have run perfectly and produced records
+   that failed their thermal gate for no visible reason. */
+#define CONSOLE_MAX_ARGS 12
 
 static void dispatch(char *line)
 {

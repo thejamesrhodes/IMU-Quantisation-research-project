@@ -1,0 +1,51 @@
+\section{Instrument and method}
+\label{sec:method}
+
+% ~1000 words.
+
+\subsection{Instrument}
+% Board; two ICM-42688-P; 32 MHz SYSCLK chosen deliberately because board
+% switching noise acts as dither and would abolish the effect under study --
+% the clock rate is a science parameter, not a performance choice; SD-logged;
+% battery; USB physically disconnected during science runs.
+\todo{Write.}
+
+\subsection{Estimators, and the anti-circularity rule}
+% Rule R3, stated structurally and prominently: sigma -- and hence rho --
+% comes ONLY from the 19-bit stream. The 16-bit code histogram is a TEST
+% STATISTIC and is never used to estimate sigma. Obtaining rho under H0 and
+% then using it to test H0 would assume the conclusion. This is the design's
+% principal defence and belongs in the method, not in a footnote.
+\todo{Write.}
+
+\subsection{The reference channel is itself a quantiser}
+\label{sec:refquant}
+% A genuine methods contribution, and the most transferable thing in the
+% paper: anyone using a higher-resolution channel as ground truth for a
+% lower-resolution one has this problem and will not have corrected for it.
+%
+% The 20-bit field truncates on a Delta/8 lattice, so phi read from it is low
+% by 1/16 Delta and its variance carries Delta'^2/12. Sheppard's own 1898
+% correction, applied to the instrument's reference channel.
+%
+% The cascade is transparent: because Delta' divides Delta exactly,
+%     floor( floor(x/Delta') Delta' / Delta ) = floor(x/Delta)
+% identically, so Q is unchanged and only Var[x] needs correcting.
+\expl{Found by fitting a free offset to a residual, not predicted in advance.
+The out-of-sample evidence is what makes it defensible: derived from the
+\SI{50}{\hertz} phase sweep, applied unchanged to the independent ODR axis,
+\refImprovement{} residual improvement on data it was not derived from. Say
+this plainly rather than presenting it as a prediction.}
+
+\begin{figure}[t]\centering
+  \includegraphics[width=\linewidth]{fig8_reference_truncation.png}
+  \caption{\todo{Residual against $\phase$, before and after. No free
+  parameters.}}
+  \label{fig:reftrunc}
+\end{figure}
+
+\subsection{Phase manipulation}
+% OFFSET_USER steps 0.4995 Delta -- so close to half an LSB that a naive
+% ladder reaches two phases. The MISS from one half is what makes it sweep.
+% A coarse trim register used as a fine phase control.
+\todo{Write. Figure to supplementary: fig9\_vernier.png}

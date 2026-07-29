@@ -92,6 +92,33 @@ int  storage_is_mounted(void);
   *         measurement the gate protects (rule R8).
   */
 int32_t storage_last_temp_mc(void);
+
+/**
+  * @brief  One record, fully specified.
+  *
+  *         `rec` parses console arguments into this and calls storage_record();
+  *         the sequencer fills it from a plan line and calls the same function.
+  *         Sharing the struct rather than duplicating the logic is deliberate:
+  *         an unattended overnight run must not be able to behave differently
+  *         from the hand-typed command you tested it with.
+  */
+typedef struct {
+  const char *label;
+  long        secs;
+  long        odr_hz;
+  int         slot1;        /**< 1-based, as the operator says it            */
+  uint8_t     aaf_floor;    /**< 0 = 585 Hz default, 1 = 42 Hz floor         */
+  int16_t     offset_user;  /**< OFFSET_USER steps, gyro, TN-13 section 4.3  */
+  long        delay_s;      /**< settle before sampling starts               */
+} storage_rec_t;
+
+/**
+  * @brief  Run one record to completion. Blocks for its duration.
+  * @retval 0 admissible; -1 setup failed; -2 data loss; -3 FIFO overflow;
+  *         -4 R2 thermal gate exceeded. Negative values other than -1 mean the
+  *         file exists and is complete but must be excised from analysis.
+  */
+int storage_record(const storage_rec_t *p);
 void storage_get_stats(storage_stats_t *out);
 const char *storage_filename(void);
 

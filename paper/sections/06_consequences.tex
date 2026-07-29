@@ -1,0 +1,39 @@
+\section{Consequences}
+\label{sec:conseq}
+
+% ~1000 words. GATED on the relevance evidence -- without it this section
+% overreaches and Critical Analysis v2.1 Z.1 says so.
+
+\subsection{At fixed configuration}
+% \arwSpan{} in fitted ARW across the phase, same sensor, same settings.
+\todo{Write.}
+
+\begin{figure}[t]\centering
+  \includegraphics[width=\linewidth]{fig11_arw_consequence.png}
+  \caption{\todo{Fitted ARW against the sub-LSB phase no toolchain
+  measures.}}
+  \label{fig:arw}
+\end{figure}
+
+\subsection{Across configuration}
+% Three worlds. AS PRACTISED: no quantisation term anywhere. PQN-AWARE: the
+% obvious fix, which nobody applies, which is STILL wrong, and which below
+% ~69 Hz returns a NEGATIVE noise density. EXACT: right by construction from
+% two measured parameters.
+%
+% The middle world is the point most easily missed and it is
+% GMWM-to-Kalman-Q v1.2 Z.2 finding 3.
+\todo{Write.}
+
+\begin{figure}[t]\centering
+  \includegraphics[width=\linewidth]{fig16_transfer_three_worlds.png}
+  \caption{\todo{Failure of the $\sqrt{\mathrm{ODR}}$ rule, and why the
+  classical correction does not fix it.}}
+  \label{fig:transfer}
+\end{figure}
+
+\subsection{Locating your own configuration}
+% Concept Note v2.3 Z.5 asks for exactly this: a table of effect size against
+% ODR at datasheet NBW, so a reader can find their own operating point rather
+% than being told about ours.
+\todo{Table. Supplementary figure: fig17\_transfer\_surface.png}

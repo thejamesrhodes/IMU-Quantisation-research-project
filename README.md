@@ -1,86 +1,84 @@
 # Sheppard — MEMS rate-register quantisation testbed
 
-Hardware, firmware and analysis for an experiment on quantisation noise in
-MEMS gyroscopes that report **rate registers** rather than angle increments.
+Hardware, firmware and analysis for an experiment on quantisation noise in MEMS
+gyroscopes that output **rate registers** rather than angle increments.
 
-The central claim under test: rate-register quantisation noise presents at a
-$-\tfrac{1}{2}$ Allan deviation slope and is silently absorbed into fitted
-angle random walk, rather than appearing as the canonical $-1$ slope
-angle-quantisation term of IEEE-952 — which belongs to FOG/RLG
-angle-increment architectures. If so, fitted stochastic parameters are
-configuration-dependent, and the $\sqrt{\text{ODR}}$ bandwidth-transfer rule
-embedded in standard IMU calibration toolchains has never been validated for
-current high-ODR parts.
+The claim under test is that rate-register quantisation shows up at a $-1/2$
+Allan slope and gets absorbed into fitted angle random walk, rather than
+appearing as the $-1$ slope angle-quantisation term in IEEE-952 — which belongs
+to FOG and RLG parts that output angle increments. If that's right, fitted noise
+parameters depend on the configuration they were measured at, and the
+$\sqrt{\text{ODR}}$ transfer rule built into every IMU calibration toolchain has
+never been checked for modern high-ODR parts.
 
-The board is named after **W. F. Sheppard**, whose 1898 paper gave the
-$-c^2/12$ correction for the variance of grouped data
-([DOI 10.1112/plms/s1-29.1.353](https://doi.org/10.1112/plms/s1-29.1.353)) —
-the same $\Delta^2/12$ that the whole experiment turns on.
-
----
+The board is named after W. F. Sheppard, whose 1898 paper gave the $-c^2/12$
+correction for the variance of grouped data
+([DOI](https://doi.org/10.1112/plms/s1-29.1.353)). That's the same
+$\Delta^2/12$ the whole experiment turns on. It also turned up in an unexpected
+place: the 19-bit reference stream is itself a quantiser, and needs Sheppard's
+correction applied to it before it can be used as a reference at all (TN-23).
 
 ## Hardware
 
 | | |
 |---|---|
-| MCU | STM32F723ZET6, LQFP144, 32 MHz (deliberately low — see below) |
+| MCU | STM32F723ZET6, 32 MHz |
 | Sensors | 2× ICM-42688-P, 1× ISM330DHCX, 1× BMI323, one SPI bus each |
 | Storage | microSD on SDMMC2, exFAT |
-| Host link | USB-C on OTG_HS with the internal HS PHY |
+| Host link | USB-C on OTG_HS, internal HS PHY |
 | Power | 4S NiMH or USB-C |
 
-**The clock rate is a science parameter, not a performance choice.** 32 MHz
-minimises digital switching noise into the analog chain. Board noise acts as
-dither: excess σ raises ρ and abolishes the effect under study. It must stay
-fixed across a campaign or be logged as a treatment variable.
+The 32 MHz clock is a science parameter, not a performance choice. Digital
+switching noise acts as dither: more of it raises $\rho$ and abolishes the
+effect being measured. It stays fixed across a campaign or gets logged as a
+treatment variable.
 
-## Repository layout
+## Layout
 
 ```
-GMWM Software/           STM32CubeIDE firmware project
-  Core/Inc, Core/Src       application sources
-  USB_DEVICE/              composite CDC device, self-flasher transport
-  tools/                   host-side Python
+GMWM Software/          STM32CubeIDE firmware project
+  Core/                   application sources
+  tools/                  host-side Python (console, analysis, figures)
 Array Electronics ICM42688P/   KiCad 10 project
-TN-*.md                  technical notes
+paper/                  LaTeX manuscript
+Figures/                generated — do not edit by hand
+Test Datasets/          records (gitignored; they go to Zenodo)
+TN-*.md                 technical notes
 ```
 
-## Firmware
-
-Built with STM32CubeIDE. The `.ioc` is the source of truth for the pin map
-and peripheral configuration.
-
-Notable modules:
-
-| File | Role |
-|---|---|
-| `sheppard_config.h` | every compile-time switch, in one place, so one file describes the build that produced a dataset |
-| `console.c` | transport-independent console: CDC primary, USART1 mirror, extensible command table |
-| `fwupdate.c` | self-flasher — receives a new image over CDC, verifies it, rewrites flash from a routine executing in RAM |
-| `boot_ctrl.c` | backup-register boot protocol |
-| `usbd_composite.c` | USB class driver wrapping the stock CDC class |
-
-### Flashing without an ST-LINK
-
-The board reflashes itself over the same USB-C cable that carries the
-console. See **TN-17A** for the procedure and **TN-17** for why it works this
-way — in short, the F72x ROM bootloader's DFU is reachable only on OTG_FS,
-which is not routed to the connector.
+## Running it
 
 ```
-pip install pyserial
+pip install pyserial numpy matplotlib
 python "GMWM Software/tools/sheppard_console.py"
 ```
 
-`sheppard_console.py` is a GUI that finds the board by USB ID, gives you a
-terminal, and flashes it. `sheppard_flash.py` and `sheppard_selftest.py` do
-the same jobs from the command line.
+The console is a GUI with five tabs: a terminal, the SD card browser, the
+campaign plan editor, an analysis runner, and a figure viewer that renders the
+plots in-app. It finds the board by USB ID rather than COM port and reconnects
+on its own when the board resets.
 
-**Run the self-test once before trusting the flasher.** It feeds the board
-deliberately bad data five ways and confirms each is refused with flash
-untouched. Nothing in it can erase the board.
+Everything it does is also available from the command line, and the panel prints
+the exact command before it runs it, so a result in the GUI and a result in a
+terminal are the same result.
 
-Recovery is always available over SWD:
+```
+python analyse.py summary "../../Test Datasets" -o "../../Test Datasets/summary.csv" --fast
+python figures.py "../../Test Datasets/summary.csv" -o "../../Figures"
+python offset_fit.py "../../Test Datasets" --glob "*ph_k*.sdat"
+```
+
+## Flashing without an ST-LINK
+
+The board reflashes itself over the same USB-C cable that carries the console.
+TN-17A is the procedure, TN-17 is why it works that way — briefly, the F72x ROM
+bootloader only exposes DFU on OTG_FS, which isn't routed to the connector.
+
+Run `sheppard_selftest.py` once before trusting the flasher. It feeds the board
+bad data five ways and checks each one is refused with flash untouched. Nothing
+in it can erase the board.
+
+SWD recovery is always there:
 
 ```
 STM32_Programmer_CLI -c port=SWD mode=UR -e all -w "Debug/GMWM STM32.elf" -v -rst
@@ -88,25 +86,31 @@ STM32_Programmer_CLI -c port=SWD mode=UR -e all -w "Debug/GMWM STM32.elf" -v -rs
 
 ## Technical notes
 
-| Note | Subject |
-|---|---|
-| TN-16 | Firmware bring-up reference — as-built record, failure modes, register maps, measured true ODR |
-| TN-17 | USB-C firmware update: design and rationale |
-| TN-17A | USB-C firmware update: setup and use |
-
-TN-16 is the one to read first. Its §1.2 bus↔chip-select table and §3
-failure-mode list represent most of the time spent getting the board alive.
+TN-16 first if you're bringing up hardware — its bus↔chip-select table and
+failure-mode list are most of the time it took to get the board alive. TN-20 is
+the campaign handover. TN-21 through TN-23 are the results: the OFFSET_USER step
+size and the vernier phase ladder, the R2 estimator error, and the phase sweep
+with the reference-truncation correction.
 
 ## Conventions
 
-- Claims in the notes are tagged **[fact]**, **[measured]**, **[inference]**
-  or **[verify]**. `[verify]` means load-bearing and not yet confirmed against
-  a primary source — treat accordingly.
-- SI units. LaTeX for mathematics.
-- Campaign data belongs in Zenodo with a DOI, not in this repository.
+Claims in the notes are tagged **[fact]**, **[measured]**, **[inference]** or
+**[verify]**. `[verify]` means load-bearing and not yet checked against a primary
+source — treat it accordingly.
+
+SI units. LaTeX for maths. Campaign data goes to Zenodo with a DOI, not into
+this repository.
+
+## Method notes
+
+`PREREGISTRATION.md` sets out which parts of this were fixed before the data and
+which were found by looking at it, and what a reader can check rather than take
+on trust. Worth reading before citing any of it. `PREREG-02.md` is a run plan —
+what I expect and what would change my mind, written down before each run.
 
 ## Status
 
-Bring-up complete: four IMUs identified and configured, SD/exFAT verified,
-cross-vendor physical validation, first noise baseline, USB firmware update
-working. Data collection is the next phase.
+Campaign running. 49 records, two specimens, three axes. The architecture is
+identified (truncation, bit-exact), $\eta(\rho)$ is measured over a decade of
+$\rho$, and a controlled phase sweep tracks the exact theory to 0.6% of its
+range with no free parameters. Manuscript is a skeleton in `paper/`.
