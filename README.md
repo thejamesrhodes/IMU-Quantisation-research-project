@@ -1,7 +1,7 @@
 # Sheppard — MEMS rate-register quantisation testbed
 
 Hardware, firmware and analysis for an experiment on quantisation noise in MEMS
-gyroscopes that output **rate registers** rather than angle increments.
+gyroscopes that output rate registers rather than angle increments.
 
 The claim under test is that rate-register quantisation shows up at a $-1/2$
 Allan slope and gets absorbed into fitted angle random walk, rather than
@@ -71,8 +71,6 @@ python offset_fit.py "../../Test Datasets" --glob "*ph_k*.sdat"
 ## Flashing without an ST-LINK
 
 The board reflashes itself over the same USB-C cable that carries the console.
-TN-17A is the procedure, TN-17 is why it works that way — briefly, the F72x ROM
-bootloader only exposes DFU on OTG_FS, which isn't routed to the connector.
 
 Run `sheppard_selftest.py` once before trusting the flasher. It feeds the board
 bad data five ways and checks each one is refused with flash untouched. Nothing
@@ -84,19 +82,7 @@ SWD recovery is always there:
 STM32_Programmer_CLI -c port=SWD mode=UR -e all -w "Debug/GMWM STM32.elf" -v -rst
 ```
 
-## Technical notes
-
-TN-16 first if you're bringing up hardware — its bus↔chip-select table and
-failure-mode list are most of the time it took to get the board alive. TN-20 is
-the campaign handover. TN-21 through TN-23 are the results: the OFFSET_USER step
-size and the vernier phase ladder, the R2 estimator error, and the phase sweep
-with the reference-truncation correction.
-
 ## Conventions
-
-Claims in the notes are tagged **[fact]**, **[measured]**, **[inference]** or
-**[verify]**. `[verify]` means load-bearing and not yet checked against a primary
-source — treat it accordingly.
 
 SI units. LaTeX for maths. Campaign data goes to Zenodo with a DOI, not into
 this repository.
