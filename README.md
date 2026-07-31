@@ -101,13 +101,6 @@ source — treat it accordingly.
 SI units. LaTeX for maths. Campaign data goes to Zenodo with a DOI, not into
 this repository.
 
-## Method notes
-
-`PREREGISTRATION.md` sets out which parts of this were fixed before the data and
-which were found by looking at it, and what a reader can check rather than take
-on trust. Worth reading before citing any of it. `PREREG-02.md` is a run plan —
-what I expect and what would change my mind, written down before each run.
-
 ## Status
 
 Campaign running. 49 records, two specimens, three axes. The architecture is
