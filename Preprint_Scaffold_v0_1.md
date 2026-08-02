@@ -37,7 +37,15 @@ That is a real measurement paper. **The core is publishable now.** Two things ga
 
 Option (ii) is honest, costs nothing, and is arguably stronger. **Recommended for the preprint; build (i) for the journal version.**
 
-**What is missing but does not block a preprint:** slot-2 phase sweep (one night, and it would materially strengthen §5); FSR axis; thermal ramp as a second phase axis; cross-vendor probe; GUM budget; the 4.9σ step-size discrepancy (TN-23 §5, touches no physics).
+**What is missing but does not block a preprint:** slot-2 phase sweep (one night, and it would materially strengthen §5 — scheduled, `plan_night3.txt` Block A); thermal ramp as a second phase axis; cross-vendor probe; GUM budget; the step-size discrepancy (TN-21 §9–10, now ≥10σ but still touches no physics).
+
+**Two additions to this list, made 30 July.**
+
+*Repeatability, and it should have been here from the start.* The 0.0179 residual RMS has **no independent error estimate**. Nothing in the campaign says whether 0.0179 is the theory failing or the instrument scattering, which means the paper currently cannot distinguish "the theory is exact to the limit of the apparatus" from "the theory is good to 0.6%". The first is a much stronger sentence and costs 30 minutes: repeat two sweep points at a different die temperature (`plan_night3.txt` Block D). Add the resulting repeatability figure to §5 wherever the residual is first quoted.
+
+*ρ at fixed ODR — a confound worth closing before a referee finds it.* Every ρ in the campaign is set by ODR, so ρ and ODR are perfectly confounded and the η(ρ) curve is open to the objection that it is a decimation or filter artefact rather than register statistics. The anti-alias filter breaks it: the existing `aaf_def`/`aaf_floor` pair moved ρ from 1.18 to 0.31 at ODR 1000 **unchanged**. Four more records give a second, orthogonal ρ axis (`plan_night3.txt` Block B). Caveat that must travel with it: switching the AAF also moves the 119 Hz line (3.18× against 3.71× for σ), so it is a ρ manipulation with a coherent-line confound attached, and the line amplitudes must be reported alongside.
+
+**FSR axis: moved from "missing" to "unavailable", which is a different claim and a better one.** There is no FSR field in the sequence format and `icm_default_cfg()` hard-codes `fs_sel = 0`, its comment stating that hi-res mode forces ±2000 dps regardless. If that is right, the FSR axis **cannot be run while the 20-bit stream is the reference** — the instrument would lose the very channel the method depends on. That belongs in §7 as a structural limitation of the *architecture* rather than in a list of things not got round to. **[verify]** against DS-000347 Rev 1.6's hi-res sensitivity table before writing it down; a web search did not settle it.
 
 ---
 

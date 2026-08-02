@@ -1,5 +1,8 @@
 # TN-21 — OFFSET_USER Step Size, and the Vernier Phase Ladder
 
+
+> **Partly superseded.** See `SUPERSEDED.md` before quoting any number from this note --- entries Z.1, Z.2, Z.4. In particular every $\eta$ here is low by $1/64$ (Z.1, TN-24 §3).
+
 **Version 1.0 — 29 July 2026**
 **Status:** the highest-priority measurement outstanding in TN-20 §8 is settled.
 **Supersedes:** TN-20 §2.5 (the degeneracy worry), TN-20 §4.6 (the 64/125 arithmetic), TN-13 §4.3 (the step-size premise). Each needs an Appendix Z entry against this note.
@@ -146,3 +149,68 @@ This is worth recording as a methodological point for the manuscript's pre-regis
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 29 Jul 2026 | Initial issue. s = 0.4995 measured; 0.512 excluded at 338 σ; ladder shown to be a 2048-point vernier; pre-register placement confirmed; c-term identified as the reason the 28 July trio could not have worked |
+| 1.1 | 30 Jul 2026 | §9 added. Slot-2 ladder read off the `p2cal` block already on disk: the two specimens agree, which withdraws §4's prediction (a) and sharpens the §5 discrepancy from 4.9 σ to ≥10 σ. §10 records the design that resolves it. |
+
+---
+
+## 9. Slot 2, from data already on disk — and it removes an explanation
+
+**[measured]** The `p2cal` block in `plan_phase.txt` was run to give slot 2 its own $\varepsilon$ before designing slot 2's sweep. Its five records were never reduced for the step size. They are:
+
+| axis | $\mu(k{=}0)$ mean | $\mu(k{=}2000)$ | $\hat s$ from the $k = 2000$ lever |
+|---|---|---|---|
+| X | 0.4590 | 999.5029 | 0.499522 |
+| Y | −2.0555 | 997.0710 | 0.499563 |
+| Z | 3.4622 | 1002.6891 | 0.499613 |
+
+$$s_{\text{slot 2}} = 0.499566 \pm 0.000026\ \Delta/\text{step}\quad\text{(between-axis SE, }n = 3)$$
+
+**9.1 The two specimens agree. [measured]**
+
+$$s_{\text{slot 2}} - s_{\text{slot 1}} = +0.000053 \pm 0.000077 \;\Rightarrow\; 0.7\,\sigma.$$
+
+**[inference]** This withdraws §4's prediction (a), which was that a per-part gain would make slot 2's $\varepsilon$ *differ*. It does not differ. Worse for the hypothesis: the between-axis spread *within* slot 2 is $9.1\times10^{-5}$, nearly twice the between-part difference, so whatever sets the residual is per-axis and not per-part. Prediction (b) — that $\varepsilon$ tracks each axis's sensitivity — survives untested and still needs a rate table.
+
+**9.2 And it escalates the §5 discrepancy. [inference]**
+
+The three estimates now available:
+
+| estimator | reads | slot | ODR | $\hat s$ |
+|---|---|---|---|---|
+| ladder | $\mu$ | 1 | 1000 | $0.499513 \pm 0.000073$ |
+| ladder | $\mu$ | 2 | 1000 | $0.499566 \pm 0.000026$ |
+| vernier | $\varphi$ | 1 | 50 | $0.499151 \pm 0.000013$ |
+
+Both ladders agree with each other to $5\times10^{-5}$ and both disagree with the vernier by $\approx 4.2\times10^{-4}$. On any reasonable error model that is $\geq 10\,\sigma$, not the 4.9 σ of §5 — the second ladder tightened the ladder side of the comparison.
+
+The point is not the significance. It is that **part-to-part and axis-to-axis variation are both $\sim 1\times10^{-4}$, four times too small to account for a $4.2\times10^{-4}$ gap.** The explanation has to be something the two ladder measurements share and the vernier does not. There are exactly two candidates, and the campaign as it stands cannot separate them, because the two existing estimates differ in *both* at once:
+
+- **ODR.** Both ladders ran at 1000 Hz, the vernier at 50 Hz.
+- **Estimator.** The ladders read $\mu$ directly; the vernier reads the precession of $\varphi$, which wraps, and so depends on unwrapping correctly over 1920 steps.
+
+That is a confounded design. Naming it as one is more useful than reporting the σ.
+
+---
+
+## 10. The design that resolves it
+
+**Not a repeat — a $2\times2$.** Two cells exist; the other two are 50 minutes of bench time, and they identify the interaction:
+
+|  | ODR 50 | ODR 1000 |
+|---|---|---|
+| **ladder**, from $\mu$ | Block C2, `plan_night3.txt` | on disk, $0.499513$ |
+| **vernier**, from $\varphi$ | on disk, $0.499151$ | Block C1, `plan_night3.txt` |
+
+Readings:
+
+- **rows agree, columns differ** → a real ODR dependence, which would locate the offset injection somewhere the decimator can see, and would be a finding rather than a nuisance;
+- **columns agree, rows differ** → the estimators disagree, and the vernier is the suspect for the reason given in §9.2;
+- **all four near 0.4995** → the ODR-50 vernier was wrong and the item closes.
+
+**9.3 A numerical coincidence, recorded so nobody later mistakes it for a mechanism. [inference]**
+
+$\varepsilon \times 128 = 0.0623$, and the phase offset TN-23 attributes to reference truncation is $+0.0623\,\Delta \approx 1/16$. The sweep's stride is 128 in $k$. These are the same number to three figures and they are unrelated.
+
+They are distinguishable, and the distinction is worth stating because it is the kind of thing that looks alarming on rediscovery: a mis-estimated $\varepsilon$ produces an error **growing linearly in $k$**, whereas the truncation offset is **constant across all sixteen points**, which is what was fitted. More decisively, $\varphi$ is *measured* per record and never computed from $k$, so $\varepsilon$ does not enter the phase assignment at all — it is used only to estimate $s$. The R6 design is what makes this safe.
+
+**Cheap confirmation, no bench time:** regress the $\eta$ residual on $k$ rather than on $\varphi$. A linear-in-$k$ trend would mean the two are entangled after all. Expect none.

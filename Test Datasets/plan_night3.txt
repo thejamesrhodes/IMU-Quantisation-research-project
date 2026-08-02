@@ -1,0 +1,235 @@
+# Sheppard -- NIGHT 3. Upload with the Sequence window, then Arm.
+#
+#   warmup <secs>
+#   step  <label> <secs> <odr> <slot> <def|floor> <offset>  <settle>
+#
+# 6 h 58 min of sequence, about 130 MB, 45 records. Budget 8 h wall clock:
+# per-record setup and SD close add ~5 s each, so expect 7 h 05 min. That
+# leaves 55 min of margin -- deliberate, because the last block is the least
+# important and can be lost without costing the paper anything.
+#
+# DO NOT USE THE `phase` DIRECTIVE. icm_offset_for_phase() still assumes one
+# step is 0.512 Delta, which TN-21 excluded at 338 sigma. Every offset below is
+# an explicit step count. See CRITIQUE at the foot of this file.
+# ---------------------------------------------------------------------------
+#
+# WHAT THIS NIGHT BUYS, IN ORDER OF VALUE
+#
+#   A  Slot-2 phase sweep. The headline result -- eta tracking the exact
+#      theory to 0.018 RMS with no free parameters -- currently rests on ONE
+#      specimen. This makes it two. Nothing else available tonight moves the
+#      paper as far.
+#
+#   D  Repeatability. The 0.018 residual RMS has NO independent error
+#      estimate: there is nothing in the campaign to say whether 0.018 is the
+#      theory failing or the instrument scattering. Two slot-1 sweep points
+#      repeated at a different die temperature give one. If they repeat to
+#      0.02 the residual is measurement noise and the theory is exact to the
+#      limit of the apparatus, which is a much stronger sentence than the one
+#      currently available.
+#
+#   B  rho at FIXED ODR, via the anti-alias filter. Every rho in the campaign
+#      so far was set by ODR, so rho and ODR are perfectly confounded and a
+#      referee can say the eta(rho) curve is a decimation artefact rather
+#      than register statistics. The AAF breaks that: the existing
+#      aaf_def/aaf_floor pair moved rho from 1.18 to 0.31 at ODR 1000
+#      unchanged. Four more records put a second, orthogonal rho axis under
+#      the same claim.
+#
+#      It also stress-tests the reference-truncation correction where it
+#      matters most. Delta'^2/12 is 0.09% of sigma^2 at rho = 1.18 but 1.4%
+#      at rho = 0.31 -- fifteen times the leverage. The largest residual in
+#      the whole campaign (-0.146) is the ODR-1000 AAF-floor X axis, which is
+#      exactly where the correction has the most work to do.
+#
+#   C  The step-size discrepancy, as a 2x2 rather than a repeat. See below.
+#
+# ORDER IS ASCENDING ODR, which is also ascending dissipation. The lesson of
+# TN-20 s2.6 stands: gated records run from a settled die, and anything that
+# heats the board goes last where drift cannot invalidate it.
+# ---------------------------------------------------------------------------
+
+# 30 min, not 15. This is one of the last nights of bench access, so the
+# expensive failure is a night of gate failures, not a late start. TN-22 s6:
+# 6156 mK/h on a board handled minutes earlier against 162 mK/h once settled.
+warmup 1800
+
+# ===========================================================================
+# BLOCK A -- slot-2 phase sweep. 16 records, 4 h 00 min.
+#
+# THE k LIST IS UNCHANGED FROM plan_phase.txt, AND THAT IS A RESULT, NOT
+# LAZINESS. The p2cal block measured slot 2 at s = 0.499566, so
+# eps_2 = 0.000434 and the vernier period is 1/eps_2 = 2305 steps -- LONGER
+# than the 2047-step register ceiling. A single sweep in even k therefore
+# cannot reach a full period on this part: k = 0..1920 spans 0.83 of one,
+# leaving a 0.167 hole per axis.
+#
+# The three axes fill it for each other. Their intrinsic phases differ
+# (phi0 = 0.521, 0.340, 0.525 for X, Y, Z), so the union of 3 axes x 16 k is
+# 48 measurements spanning phi = 0.007 to 0.969 with a largest gap of 0.056.
+# That is the same coverage slot 1 achieved and by the same mechanism.
+#
+# Consequence worth stating in the paper: the edge region, where eta peaks at
+# 3 - 12 rho^2, is reached ONLY through the axis offsets. Do not drop an axis
+# in analysis to save time.
+#
+# Bit-reversed in k, so corr(phi, time) stays near zero and any residual
+# thermal drift is orthogonal to the phase axis rather than confounded with
+# it.
+# ===========================================================================
+step s2ph_k0000  600    50  2  def     0  300
+step s2ph_k1024  600    50  2  def  1024  300
+step s2ph_k0512  600    50  2  def   512  300
+step s2ph_k1536  600    50  2  def  1536  300
+step s2ph_k0256  600    50  2  def   256  300
+step s2ph_k1280  600    50  2  def  1280  300
+step s2ph_k0768  600    50  2  def   768  300
+step s2ph_k1792  600    50  2  def  1792  300
+step s2ph_k0128  600    50  2  def   128  300
+step s2ph_k1152  600    50  2  def  1152  300
+step s2ph_k0640  600    50  2  def   640  300
+step s2ph_k1664  600    50  2  def  1664  300
+step s2ph_k0384  600    50  2  def   384  300
+step s2ph_k1408  600    50  2  def  1408  300
+step s2ph_k0896  600    50  2  def   896  300
+step s2ph_k1920  600    50  2  def  1920  300
+
+# ===========================================================================
+# BLOCK D -- repeatability of the slot-1 sweep. 2 records, 30 min.
+#
+# Same slot, same ODR, same k as two points already on disk, but five hours
+# later and at a different die temperature. This is the only record in the
+# campaign that measures the REPEATABILITY of eta rather than its value.
+#
+# k = 0 and k = 0896 chosen deliberately: 0 sits near a code edge on X where
+# |d(eta)/d(phi)| is largest, so it is the least forgiving repeat available.
+# 0896 sits mid-range as a control.
+#
+# READ THIS AS A PAIRED COMPARISON, not as two new sweep points. Pooling them
+# into the slot-1 sweep fit would double-count.
+# ===========================================================================
+step s1rep_k0000 600    50  1  def     0  300
+step s1rep_k0896 600    50  1  def   896  300
+
+# ===========================================================================
+# BLOCK C2 -- step size from mu, at ODR 50. 5 records, 30 min.
+#
+# THE OPEN ITEM, RESTATED AS A DESIGN RATHER THAN A REPEAT.
+#
+# Two estimates of s disagree at 4.9 sigma:
+#     ladder, from mu,  slot 1, ODR 1000   0.499513 +/- 0.000073
+#     vernier, from phi, slot 1, ODR 50    0.499151 +/- 0.000013
+# They differ in TWO ways at once -- estimator and ODR -- so the campaign
+# cannot say which matters. That is a confounded design, not a puzzle.
+#
+# The p2cal block already narrows it. Slot 2's ladder gives 0.499566, which
+# is 0.000053 from slot 1's ladder at the same ODR, while the axis spread
+# within slot 2 is 0.000091. So per-part and per-axis variation are both
+# ~1e-4, four times too small to explain a 4.2e-4 gap. TN-21 s4 attributed
+# the residual to per-axis scale-factor trim; the slot-2 data does not
+# support that.
+#
+# What is left is estimator or ODR. C2 and C1 complete the 2x2:
+#
+#                    ODR 50            ODR 1000
+#     ladder (mu)    C2, tonight       on disk, 0.499513
+#     vernier (phi)  on disk, 0.499151 C1, tonight
+#
+# Two cells exist, two are added, and the interaction is then identified.
+# If C2 lands near 0.4991 the effect is ODR; if it lands near 0.4995 it is
+# the estimator, and the vernier is the suspect because it is the one that
+# depends on unwrapping phi correctly.
+#
+# k = 2000, not 1000: twice the lever for the same time. 300 s at ODR 50 is
+# 15000 samples, SE(mu) = 0.008 Delta from counting, but bias-instability
+# wander is 0.006-0.051 Delta per record (TN-22 s4) and DOMINATES. Wander
+# averages down over repeats, not over record length, which is why this is
+# five short records with brackets rather than two long ones.
+# ===========================================================================
+step c2_0a       300    50  1  def     0   60
+step c2_2000a    300    50  1  def  2000   60
+step c2_0b       300    50  1  def     0   60
+step c2_2000b    300    50  1  def  2000   60
+step c2_0c       300    50  1  def     0   60
+
+# ===========================================================================
+# BLOCK B -- rho at fixed ODR. 6 records, 1 h 08 min.
+#
+# Each of these PAIRS WITH A RECORD ALREADY ON DISK at the same ODR, same
+# slot, same offset, default AAF. Lengths match the existing records exactly
+# so the pairing is clean:
+#     s1_odr50 / s2_odr50    600 s     s1_odr200 / s2_odr200   498 s
+#     s1_odr1000             228 s     s2_odr1000              228 s
+# The ODR-1000 floor records are 300 s to match the existing aaf_floor
+# record rather than its def partner, because that is the comparison being
+# replicated.
+#
+# DIRECTION FLIPS WITH ODR, and that is useful. The default UI filter tracks
+# ODR (NBW ~ 0.52 x ODR down to a 13 Hz floor) while `floor` is a fixed
+# 42 Hz. So at ODR 1000 floor is far NARROWER than default and rho falls
+# 1.18 -> 0.31; at ODR 50 the default NBW is ~26 Hz and floor at 42 Hz is
+# WIDER, so rho should RISE above 0.95. One knob, both directions, ODR held
+# fixed throughout. Predict and record which before looking.
+#
+# CAUTION, and it must go in the paper. Changing the AAF changes the
+# 119 Hz line as well as the Gaussian width -- the measured amplitude moved
+# 3.18x against 3.71x for sigma. So this axis is NOT a clean rho
+# manipulation; it is a rho manipulation with a coherent-line confound
+# attached. Check line_D and line_pct_var on every record here before using
+# them, and if the line moves materially the axis becomes a consistency check
+# rather than evidence.
+# ===========================================================================
+step s1_odr50_fl   600    50  1  floor  0  300
+step s2_odr50_fl   600    50  2  floor  0  300
+step s1_odr200_fl  498   200  1  floor  0  300
+step s2_odr200_fl  498   200  2  floor  0  300
+step s1_odr1k_fl   300  1000  1  floor  0   60
+step s2_odr1k_fl   300  1000  2  floor  0   60
+
+# ===========================================================================
+# BLOCK C1 -- vernier at ODR 1000. 16 records, 20 min.
+#
+# The fourth cell of the 2x2. Same k list as Block A, so the same
+# phi-precession fit applies, but at ODR 1000 where the ladder was measured.
+# 60 s at ODR 1000 is 60000 samples and SE(mu) is 0.004 Delta, comparable to
+# the ODR-50 records despite being a tenth as long.
+#
+# LAST, because ODR 1000 for 20 minutes is the largest heat load of the
+# night and nothing after it needs a settled die.
+# ===========================================================================
+step c1_k0000     60  1000  1  def     0   15
+step c1_k1024     60  1000  1  def  1024   15
+step c1_k0512     60  1000  1  def   512   15
+step c1_k1536     60  1000  1  def  1536   15
+step c1_k0256     60  1000  1  def   256   15
+step c1_k1280     60  1000  1  def  1280   15
+step c1_k0768     60  1000  1  def   768   15
+step c1_k1792     60  1000  1  def  1792   15
+step c1_k0128     60  1000  1  def   128   15
+step c1_k1152     60  1000  1  def  1152   15
+step c1_k0640     60  1000  1  def   640   15
+step c1_k1664     60  1000  1  def  1664   15
+step c1_k0384     60  1000  1  def   384   15
+step c1_k1408     60  1000  1  def  1408   15
+step c1_k0896     60  1000  1  def   896   15
+step c1_k1920     60  1000  1  def  1920   15
+
+# ===========================================================================
+# WHAT IS DELIBERATELY NOT HERE
+#
+# FSR axis. There is no FSR field in the sequence format and fs_sel is
+# hard-coded to 0 in icm_default_cfg(), whose comment says hi-res mode forces
+# +/-2000 dps regardless. If that is right the FSR axis is not merely unrun,
+# it is UNAVAILABLE while the 20-bit stream is the reference -- which is a
+# limitation to state in the paper, not a gap to apologise for. UNVERIFIED:
+# check DS-000347 Rev 1.6 for the hi-res sensitivity table before writing it
+# down as fact.
+#
+# Thermal phase ramp. Attractive -- ZRO tempco 0.0819 Delta/K means 6.8 K/h
+# of self-heating sweeps 0.56 Delta/h, several periods over a night, through
+# a mechanism completely independent of the offset register. But it needs
+# short records to keep within-record phase smear below ~0.01 Delta, which
+# fights the long records ODR 50 needs for eta precision, and it has never
+# been tried. Do not spend one of the last nights debugging a new design.
+# Write it up as the obvious next experiment instead.
+# ===========================================================================

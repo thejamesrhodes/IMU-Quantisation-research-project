@@ -1,5 +1,8 @@
 # TN-22 — The R2 Estimator Error, and What the Thermal Environment Actually Needs
 
+
+> **Partly superseded.** See `SUPERSEDED.md` before quoting any number from this note --- entries Z.1, Z.5. In particular every $\eta$ here is low by $1/64$ (Z.1, TN-24 §3).
+
 **Version 1.0 — 29 July 2026**
 **Status:** rule R2 has been evaluated with the wrong statistic since the campaign began. This note corrects it, restates every gated record, and sizes the enclosure problem from the corrected numbers.
 **Supersedes:** TN-20 §2.6 ("seven of fourteen gated records failed R2"). TN-14 §2.2 keeps its physics; its estimator needs specifying, which it never was.

@@ -15,7 +15,7 @@ The board is named after W. F. Sheppard, whose 1898 paper gave the $-c^2/12$
 correction for the variance of grouped data
 ([DOI](https://doi.org/10.1112/plms/s1-29.1.353)). That's the same
 $\Delta^2/12$ the whole experiment turns on. It also turned up in an unexpected
-place: the 19-bit reference stream is itself a quantiser, and needs Sheppard's
+place: the 20-bit reference stream is itself a quantiser, and needs Sheppard's
 correction applied to it before it can be used as a reference at all (TN-23).
 
 ## Hardware
@@ -88,9 +88,15 @@ STM32_Programmer_CLI -c port=SWD mode=UR -e all -w "Debug/GMWM STM32.elf" -v -rs
 
 TN-16 first if you're bringing up hardware — its bus↔chip-select table and
 failure-mode list are most of the time it took to get the board alive. TN-20 is
-the campaign handover. TN-21 through TN-23 are the results: the OFFSET_USER step
-size and the vernier phase ladder, the R2 estimator error, and the phase sweep
-with the reference-truncation correction.
+the campaign handover. TN-21 through TN-24 are the results: the OFFSET_USER step
+size and the vernier phase ladder, the R2 estimator error, the phase sweep with
+the reference-truncation correction, and the third place that correction
+belonged.
+
+**Read TN-24 before quoting a number from any earlier note.** It found that
+the reference correction had been applied to two of the three places it
+belongs, which left every $\eta$ in the campaign low by exactly $1/64$. All
+of them are superseded.
 
 ## Conventions
 
@@ -103,14 +109,25 @@ this repository.
 
 ## Method notes
 
-`PREREGISTRATION.md` sets out which parts of this were fixed before the data and
-which were found by looking at it, and what a reader can check rather than take
-on trust. Worth reading before citing any of it. `PREREG-02.md` is a run plan —
-what I expect and what would change my mind, written down before each run.
+Which parts of this were fixed before the data and which were found by looking
+at it is set out in `paper/sections/07_limitations.tex` and in the `\expl{}`
+markers through the manuscript. Anything marked exploratory was found in the
+residuals, not predicted — the reference-truncation correction of TN-23 above
+all. Read that before citing any of it.
+
+Run plans carry their reasoning in the file. `Test Datasets/plan_*.txt` each
+state what the run is for, what the expected outcome is, and what would change
+my mind, written before the run rather than after.
 
 ## Status
 
-Campaign running. 49 records, two specimens, three axes. The architecture is
-identified (truncation, bit-exact), $\eta(\rho)$ is measured over a decade of
-$\rho$, and a controlled phase sweep tracks the exact theory to 0.6% of its
-range with no free parameters. Manuscript is a skeleton in `paper/`.
+94 records, two specimens, three axes. The architecture is identified
+(truncation, bit-exact), $\eta(\rho)$ is measured over a decade of $\rho$, and
+a controlled phase sweep tracks the exact theory to **0.4% of its range with no
+free parameters — on both specimens independently**. Repeatability is measured
+at $\sigma_\eta = 0.0065$, so the theory is good to about twice the noise floor
+of the apparatus.
+
+Manuscript is a skeleton in `paper/`. The bench work the preprint needs is
+done; what is left is desk work — the relevance evidence, the software dither
+sweep, and writing it.

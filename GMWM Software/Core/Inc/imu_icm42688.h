@@ -262,14 +262,10 @@ int  icm_write8_verify(bus_slot_t slot, uint8_t reg, uint8_t val);
   */
 int  icm_set_gyro_offset(bus_slot_t slot, int16_t steps);
 
-/**
-  * @brief  Step count landing closest to a target phase.
-  *
-  *         Solves (64k mod 125)/125 ~= num/den using the inverse of 64 modulo
-  *         125. Exposed so the console can print the ladder and a reviewer can
-  *         check it against the arithmetic documented at ICM_OFFSET_USER0.
-  */
-int16_t icm_offset_for_phase(int num, int den);
+/* icm_offset_for_phase() was removed on 30 July 2026: it assumed a 0.512 Delta
+   step, which TN-21 excluded at 338 sigma. See the note at its old site in
+   imu_icm42688.c for why it is deleted rather than corrected. Plans use
+   explicit step counts. */
 
 /** Register the `icm` and `fifo` console commands. */
 void icm_console_init(void);

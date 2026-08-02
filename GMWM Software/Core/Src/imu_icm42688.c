@@ -89,17 +89,30 @@ static int icm_bank(bus_slot_t slot, uint8_t bank)
 
 static int icm_rmw(bus_slot_t slot, uint8_t reg, uint8_t mask, uint8_t val);
 
-int16_t icm_offset_for_phase(int num, int den)
-{
-  /* One step is 0.512 = 64/125 of a 16-bit LSB, so k steps give phase
-     (64k mod 125)/125. Inverting: to reach phase m/125, take k = 84m mod 125,
-     since 64 * 84 = 5376 = 43*125 + 1, i.e. 84 is the inverse of 64 mod 125.
-     Round the requested fraction onto the 125-point lattice first. */
-  if (den <= 0) { return 0; }
-  int m = (int)(((long)num * 125L + (long)den / 2L) / (long)den) % 125;
-  if (m < 0) { m += 125; }
-  return (int16_t)((84 * m) % 125);
-}
+/* REMOVED 30 July 2026. This computed a step count for a REQUESTED phase, on
+   the premise that one OFFSET_USER step is 0.512 = 64/125 of a 16-bit LSB.
+   That premise is wrong: TN-21 measured 0.4995 and excluded 0.512 at 338
+   sigma. Anything calling it got a phase it had not asked for.
+
+   It is deleted rather than corrected, because with the measured step size the
+   whole idea is unsound and not merely mis-parameterised:
+
+     - s is within 0.1% of one half, so the inverse-mod-125 construction has no
+       analogue. Even step counts land near phase 0 and odd ones near 0.5; the
+       sweep comes from the MISS from one half, eps = s - 1/2, precessing by
+       eps per step.
+     - eps is known to about 4%, and to 15% at the time the ladder was
+       designed, so a k solved for a target phase carries that error straight
+       into the design. sigma_phi = k * SE(s) reaches 0.13 Delta by k = 1800.
+     - eps is ODR-DEPENDENT (TN-24 section 6, 15 sigma), so there is no single
+       k-to-phase map to invert in the first place.
+     - and it is unnecessary. The register's job is to MOVE the phase, not to
+       place it: eta is always evaluated at the phi MEASURED from that record.
+       Plans therefore step uniformly in k, which a wrong eps can stretch or
+       compress but cannot cluster.
+
+   Use explicit step counts in plan files. See plan_phase.txt and
+   plan_night3.txt, whose headers carry the same argument. */
 
 int icm_set_gyro_offset(bus_slot_t slot, int16_t steps)
 {

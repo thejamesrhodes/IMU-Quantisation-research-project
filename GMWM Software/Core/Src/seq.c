@@ -105,7 +105,24 @@ static void warmup(long secs)
 static void run_step(char **tok, int ntok, int is_phase, seq_tally_t *t)
 {
   /* step  <label> <secs> <odr> <slot> <def|floor> <offset>  <settle> */
-  /* phase <label> <secs> <odr> <slot> <def|floor> <num>/<den> <settle> */
+  /*
+     `phase` is REFUSED, not translated. It used to take <num>/<den> and solve
+     for the step count landing nearest that phase, via a 0.512 Delta step size
+     that TN-21 excluded at 338 sigma. A plan using it got a phase it had not
+     asked for, silently.
+
+     Refusing is deliberate. Accepting the line and reinterpreting the field as
+     a step count would run the night at the wrong phases just as quietly; a
+     skipped step is visible in the tally and in the console log. Fix the plan
+     file, not the firmware.                                (30 July 2026) */
+  if (is_phase)
+  {
+    console_printf("seq: `phase` was removed -- give an explicit step count "
+                   "with `step` (TN-21). Skipped: %s\r\n", tok[1] ? tok[1] : "");
+    t->skipped++;
+    return;
+  }
+
   if (ntok < 7)
   {
     console_printf("seq: too few fields, skipped: %s\r\n", tok[0]);
@@ -125,19 +142,7 @@ static void run_step(char **tok, int ntok, int is_phase, seq_tally_t *t)
     .delay_s = (ntok >= 8) ? strtol(tok[7], NULL, 10) : 0,
   };
 
-  if (is_phase)
-  {
-    char *slash = strchr(tok[6], '/');
-    int num = (int)strtol(tok[6], NULL, 10);
-    int den = slash ? (int)strtol(slash + 1, NULL, 10) : 1;
-    p.offset_user = icm_offset_for_phase(num, den);
-    console_printf("seq: phase %d/%d -> OFFSET_USER %d steps\r\n",
-                   num, den, (int)p.offset_user);
-  }
-  else
-  {
-    p.offset_user = (int16_t)strtol(tok[6], NULL, 10);
-  }
+  p.offset_user = (int16_t)strtol(tok[6], NULL, 10);
 
   t->steps++;
   console_printf("seq: [%lu] %s  %ld s @ %ld Hz slot %d %s off %d\r\n",

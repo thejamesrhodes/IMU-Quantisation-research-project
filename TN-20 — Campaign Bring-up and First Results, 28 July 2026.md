@@ -1,5 +1,8 @@
 # TN-20 — Campaign Bring-up and First Results, 28 July 2026
 
+
+> **Partly superseded.** See `SUPERSEDED.md` before quoting any number from this note --- entries Z.1, Z.4, Z.5. In particular every $\eta$ here is low by $1/64$ (Z.1, TN-24 §3).
+
 **Status: the primary effect is measured and the sign of the phase dependence is
 confirmed. The instrument is complete and unattended. The first campaign night
 is compromised by a thermal-gate ordering error and must be repeated.**

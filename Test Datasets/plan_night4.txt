@@ -1,0 +1,140 @@
+# Sheppard -- NIGHT 4. Upload with the Sequence window, then Arm.
+#
+#   warmup <secs>
+#   step  <label> <secs> <odr> <slot> <def|floor> <offset>  <settle>
+#
+# (`phase` was removed 30 Jul 2026 and the firmware now refuses it.)
+#
+# 7 h 18 min of sequence, 32 records, about 110 MB. Expect 7 h 25 min wall.
+# ---------------------------------------------------------------------------
+#
+# THIS NIGHT DOES ONE THING: it pins the repeatability of eta.
+#
+# That sounds modest and is not. After TN-24 the phase sweep residual is
+# 0.0119 RMS over 96 measurements and the measured repeatability is
+# sigma_eta = 0.0065 -- but on only SIX pairs, so sigma_eta carries +/-32% of
+# its own and chi2_nu could be anywhere from 1.3 to 8. The paper therefore
+# cannot yet choose between two very different sentences:
+#
+#   "the exact theory predicts eta to 0.4% of its range"
+#   "the exact theory predicts eta to the repeatability of the apparatus,
+#    and no departure from it is detectable"
+#
+# The second is much stronger and it is the one a referee cannot argue with.
+# Which one is true is a measurement, and it is this one. Nothing else
+# outstanding needs bench time: the FSR axis is unavailable, the AAF axis is
+# dead (TN-24 s7), the step-size 2x2 is resolved, and the replication is done.
+#
+# DESIGN: 6 settings x 4 replicates, interleaved. Replicates are what average
+# down bias-instability wander, and wander -- not counting statistics -- is
+# what limits SE(mu) and hence phi (TN-22 s4). 18 (setting, axis) cells with 4
+# replicates each gives the pooled within-cell SD 54 degrees of freedom, so
+# sigma_eta lands to about +/-10% instead of +/-32%.
+#
+# ORDER IS ROUND-ROBIN, NOT BLOCKED. All six settings run, then all six again,
+# four times over. Blocking the replicates together would measure short-term
+# repeatability only and confound the long-term part with die temperature --
+# which is the same mistake as the descending-ODR ordering of TN-20 s2.6 in a
+# new costume. Round-robin makes every replicate set span the whole night, so
+# the SD it returns is the one the campaign actually needs.
+#
+# k SPANS THE PHASE PERIOD (stride 384) so the night also answers a second
+# question for free: does repeatability depend on phi? It should be worst where
+# |d(eta)/d(phi)| is largest, near the code edge. If it is, the error model for
+# the paper is |d(eta)/d(phi)| * sigma_phi rather than a constant, and that is
+# worth knowing before the results section quotes a single number.
+# ---------------------------------------------------------------------------
+
+warmup 1800
+
+# ===========================================================================
+# PASS 1
+# ===========================================================================
+step rp1_k0000  600    50  1  def     0  300
+step rp1_k0384  600    50  1  def   384  300
+step rp1_k0768  600    50  1  def   768  300
+step rp1_k1152  600    50  1  def  1152  300
+step rp1_k1536  600    50  1  def  1536  300
+step rp1_k1920  600    50  1  def  1920  300
+
+# ===========================================================================
+# PASS 2
+# ===========================================================================
+step rp2_k0000  600    50  1  def     0  300
+step rp2_k0384  600    50  1  def   384  300
+step rp2_k0768  600    50  1  def   768  300
+step rp2_k1152  600    50  1  def  1152  300
+step rp2_k1536  600    50  1  def  1536  300
+step rp2_k1920  600    50  1  def  1920  300
+
+# ===========================================================================
+# PASS 3
+# ===========================================================================
+step rp3_k0000  600    50  1  def     0  300
+step rp3_k0384  600    50  1  def   384  300
+step rp3_k0768  600    50  1  def   768  300
+step rp3_k1152  600    50  1  def  1152  300
+step rp3_k1536  600    50  1  def  1536  300
+step rp3_k1920  600    50  1  def  1920  300
+
+# ===========================================================================
+# PASS 4
+# ===========================================================================
+step rp4_k0000  600    50  1  def     0  300
+step rp4_k0384  600    50  1  def   384  300
+step rp4_k0768  600    50  1  def   768  300
+step rp4_k1152  600    50  1  def  1152  300
+step rp4_k1536  600    50  1  def  1536  300
+step rp4_k1920  600    50  1  def  1920  300
+
+# ===========================================================================
+# HIGH-rho REPEATS -- 8 records, 48 min, and they answer a live question.
+#
+# The ODR axis and the AAF records sit at residual RMS 0.063-0.107 against the
+# sweep's 0.012. TN-24 s3.4 assumes that is estimator variance rather than
+# model error, on the grounds that eta_exact -> 1 at high rho so the whole
+# dynamic range collapses. ASSUMES. Nobody has measured the repeatability at
+# high rho, so nobody knows.
+#
+# If these repeat to ~0.06 the assumption is right and the eta(rho) curve is
+# noise-limited, which is a fine thing to say. If they repeat to ~0.01 then
+# 0.063 is real model error at high rho and section 5.2 of the manuscript needs
+# rewriting. Two outcomes, both worth 48 minutes, and the second one would be
+# the most important finding available tonight.
+#
+# LAST, because ODR 1000 is the heat load and nothing after it needs a settled
+# die.
+# ===========================================================================
+step hr1_a      300  1000  1  def     0   60
+step hr1_b      300  1000  1  def     0   60
+step hr1_c      300  1000  1  def     0   60
+step hr1_d      300  1000  1  def     0   60
+step hr2_a      300  1000  2  def     0   60
+step hr2_b      300  1000  2  def     0   60
+step hr2_c      300  1000  2  def     0   60
+step hr2_d      300  1000  2  def     0   60
+
+# ===========================================================================
+# MORNING ANALYSIS -- the one number this night exists to produce
+#
+#   python analyse.py summary "..\..\Test Datasets" -o "..\..\Test Datasets\summary.csv" --fast
+#
+# Then, per (setting, axis) cell, the SD of eta_resid across the 4 replicates.
+# Pool those 18 SDs (54 dof) to get sigma_eta. Compare with the sweep residual
+# RMS of 0.0119:
+#
+#   sigma_eta ~ 0.012  ->  the residual IS measurement noise. The theory is
+#                          exact to the limit of the apparatus. Say so, and it
+#                          is the strongest sentence in the paper.
+#   sigma_eta ~ 0.006  ->  chi2_nu ~ 4 confirmed. There is real structure at
+#                          0.010 and it needs naming. First suspect is
+#                          non-Gaussianity: slot-2 Y has the worst residual
+#                          (0.021) and the highest tail ratio (1.18).
+#   sigma_eta ~ 0.020  ->  the sweep residual is BELOW the repeatability,
+#                          which would mean the 96 measurements are not
+#                          independent. Check for a shared nuisance before
+#                          celebrating.
+#
+# Also: regress the per-cell SD on |d(eta)/d(phi)| at that cell's phi. A slope
+# means the error model is phase-dependent and the paper should say so.
+# ===========================================================================

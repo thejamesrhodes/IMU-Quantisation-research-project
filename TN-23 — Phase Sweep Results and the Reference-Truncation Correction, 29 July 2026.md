@@ -1,5 +1,8 @@
 # TN-23 — The Controlled Phase Sweep, and Sheppard's Correction Applied to the Reference Channel
 
+
+> **Partly superseded.** See `SUPERSEDED.md` before quoting any number from this note --- entries Z.1, Z.3. In particular every $\eta$ here is low by $1/64$ (Z.1, TN-24 §3).
+
 **Version 1.0 — 29 July 2026**
 **Status:** the causal phase manipulation is delivered, and it exposed a systematic error in every phase quoted by the project to date.
 **Supersedes:** the residual quality of TN-20 §2.2 and fig2. TN-21 §1's step size is contradicted by this run and the discrepancy is open (§5).

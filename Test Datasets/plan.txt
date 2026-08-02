@@ -2,7 +2,9 @@
 #
 #   warmup <secs>
 #   step  <label> <secs> <odr> <slot> <def|floor> <offset>    <settle>
-#   phase <label> <secs> <odr> <slot> <def|floor> <num>/<den> <settle>
+# (`phase` was removed 30 Jul 2026 -- it assumed a 0.512 Delta step, which
+#  TN-21 excluded at 338 sigma. The firmware now refuses the directive.
+#  Use `step` with an explicit count.)
 #
 # About 3 h 10 min, about 170 MB.
 # ---------------------------------------------------------------------------

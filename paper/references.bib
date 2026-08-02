@@ -83,12 +83,67 @@
              Explicable as an angle-increment architecture. FULL TEXT NEEDED.}
 }
 
-% --- TO ADD ----------------------------------------------------------------
-% Bennett 1948 -- cite OURSELVES, per Objections v2.1 Z.2
-% Sripad & Snyder 1977
-% Bussgang 1952
-% IEEE Std 952-1997
-% IEEE Std 1241-2010          -- the DNL / code-density basis
-% Rehder et al. 2016 (Kalibr) -- and the documentation URL with access date
-% Tedaldi et al. 2014 (IMU-TK)
-% TDK InvenSense DS-000347 Rev 1.6
+
+% ===========================================================================
+% Toolchain documentation, for Table 1. VERIFIED against the live source on
+% 30 July 2026. Typed as misc/software rather than article because they ARE
+% documentation and code; citing them as journal papers would misrepresent
+% them, and a referee checking Table 1 must land on the page with the quote.
+% ===========================================================================
+
+@misc{kalibrwiki,
+  author       = {{Kalibr contributors}},
+  title        = {{IMU} Noise Model --- Kalibr wiki},
+  howpublished = {\url{https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model}},
+  year         = {2023},
+  note         = {Last revised 28 March 2023 by P. Geneva. Accessed
+                  30 July 2026. Source of the verbatim conditions quoted in
+                  Sec.~\ref{sec:background}: the sqrt-ODR scaling
+                  "assumes ... an ideal decimation stage", "If you simply
+                  'subsample' your gyro or accel, you are not allowed to scale
+                  your 'white noise density' in that way", and "So clearly,
+                  the model is optimistic". NOT the same document as
+                  Rehder et al. (2016) -- do not conflate.}
+}
+
+@misc{allanvarianceros,
+  author       = {Buchanan, Russell},
+  title        = {Allan Variance {ROS}, version 1.2, Oxford Robotics
+                  Institute {DRS} Lab},
+  year         = {2021},
+  howpublished = {\url{https://github.com/ori-drs/allan_variance_ros}},
+  note         = {Accessed 30 July 2026. Reports angle random walk, bias
+               instability and rate random walk; no quantisation coefficient.
+               Emits a Kalibr imu.yaml, so it inherits the sqrt-ODR transfer
+               through the update\_rate field. Citation form as given by the
+               project's own README.}
+}
+
+@misc{imuutils,
+  author       = {Gao, Wenliang},
+  title        = {\texttt{imu\_utils}: a {ROS} package tool to analyze the
+                  {IMU} performance},
+  howpublished = {\url{https://github.com/gaowenliang/imu_utils}},
+  note         = {Accessed 30 July 2026. YAML output carries gyr\_n and gyr\_w
+                  only -- white noise and bias instability. Whether the
+                  internal Allan fit includes a Q term is NOT settled by the
+                  README and must be checked in the source before Table 1
+                  makes a claim either way.}
+}
+
+% ---------------------------------------------------------------------------
+% STILL TO ADD, and Table 1 has a \todo for each:
+%   GMWM / simts / wv        -- Guerrier et al.; find the paper that documents
+%                               the latent-process set, not just the package
+%   MATLAB Sensor Fusion     -- the allanvar doc page, with access date
+%   NaveGo                   -- Gonzalez et al.
+%   Rehder et al. 2016       -- "Extending kalibr", ICRA. The PAPER, separate
+%                               from the wiki above
+%   Bennett 1948             -- cite ourselves, per Objections v2.1 Z.2
+%   Sripad & Snyder 1977
+%   Bussgang 1952
+%   IEEE Std 952-1997        -- and note Kalibr cites it as its own ref [1]
+%   IEEE Std 1241-2010       -- the code-density / DNL basis
+%   Tedaldi et al. 2014      -- IMU-TK, the deterministic family
+%   TDK InvenSense DS-000347 Rev 1.6
+% ---------------------------------------------------------------------------

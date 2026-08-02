@@ -52,7 +52,28 @@ DELTA_MDPS = 61.03515625
 
 
 def _phase_rows(rows):
+    """Slot-1 sweep only.
+
+    Deliberately NOT both specimens. Anything fitting the vernier needs one
+    part at a time, because eps is per-part (TN-21 s9) and pooling two would
+    fit a step size neither of them has.
+    """
     return [r for r in rows if str(r.get("label", "")).startswith("ph_k")]
+
+
+def _sweep_rows(rows):
+    """Both specimens' phase sweeps, slot-1 first so colours stay stable.
+
+    For figures about the THEORY rather than about the register: there the
+    second specimen is a replication and belongs in the same axes.
+    """
+    a = [r for r in rows if str(r.get("label", "")).startswith("ph_k")]
+    b = [r for r in rows if str(r.get("label", "")).startswith("s2ph_k")]
+    return a + b
+
+
+def _is_slot2(r):
+    return str(r.get("label", "")).startswith("s2ph_k")
 
 
 def _save(fig, out):
@@ -167,50 +188,108 @@ def fig_reference_truncation(rows, out):
     from the reference is low by 1/16 Delta, and its variance carries
     step^2/12 of its own quantisation noise.
 
-    Left: the residual against the uncorrected phase is not scatter, it is a
-    smooth sign-changing function of phi -- the signature of a phase offset.
-    Right: the same data with the two corrections applied. No free parameters.
+    THREE PANELS, because the correction has three parts and the campaign
+    applied two of them for a day (TN-24 s3). Drawing only the before and after
+    hides the most instructive step: after correcting phi and rho the residual
+    stops being phi-shaped but keeps a CONSTANT offset, and that constant is
+    (Delta'/Delta)^2 = 1/64 exactly -- eta's own missing term.
+
+    Left:   nothing corrected. Not scatter: a smooth sign-changing function of
+            phi, the signature of a phase offset.
+    Middle: phi and rho corrected. The shape is gone, a constant is left.
+    Right:  eta corrected too. Zero mean, and the spread is what the apparatus
+            can repeat to.
+
+    No free parameters anywhere: 1/16 and 1/64 are both forced by Delta' =
+    Delta/8.
     """
-    sel = _phase_rows(rows)
+    sel = _sweep_rows(rows)
     if not sel:
         print("  (no ph_k records; skipping the truncation figure)")
         return
 
-    fig, (ax, bx) = plt.subplots(1, 2, figsize=(10.6, 4.5), sharey=True)
+    REF_STEP = 2.0 / 16.0
+    ETA_FIX = REF_STEP ** 2                     # 1/64, see TN-24 s3.2
 
-    raw, cor = [], []
+    # NOT sharey across all three. Panel 1's residual is 0.38 RMS and panels 2
+    # and 3 are 0.019 and 0.012, so a common axis makes the last two visually
+    # identical and the middle panel cannot show the constant it exists to
+    # show. Panels 2 and 3 share a zoomed axis with each other, which is the
+    # comparison that matters, and panel 1 is annotated with the change of
+    # scale so nobody reads the widths as comparable.
+    fig, axes = plt.subplots(1, 3, figsize=(13.8, 4.5))
+    axes[2].sharey(axes[1])
+
+    none_, two, three = [], [], []
     for r in sel:
         rho, phi = _num(r, "rho"), _num(r, "phi")
-        e = _num(r, "eta")
-        raw.append((phi, e - eta_exact(rho, phi)))
-        cor.append((_num(r, "phi_ref"), _num(r, "eta_resid")))
-    raw, cor = np.array(raw), np.array(cor)
+        # eta as stored is now the FULLY corrected value, so undo the eta part
+        # to recover the two intermediate states rather than hard-coding them.
+        e_full = _num(r, "eta")
+        e_uncorr = e_full - ETA_FIX
+        s2 = 1.0 if _is_slot2(r) else 0.0
+        none_.append((phi, e_uncorr - eta_exact(rho, phi), s2))
+        two.append((_num(r, "phi_ref"), e_uncorr - _num(r, "eta_exact"), s2))
+        three.append((_num(r, "phi_ref"), _num(r, "eta_resid"), s2))
+    none_, two, three = np.array(none_), np.array(two), np.array(three)
 
-    for panel, dat, title in (
-            (ax, raw, "As published\n"
-                      r"$\varphi$ and $\rho$ straight from the reference stream"),
-            (bx, cor, "Corrected\n"
-                      r"$\varphi + \frac{1}{16}$,  "
-                      r"$\sigma^2 - \Delta'^2/12$   (no free parameters)")):
+    panels = (
+        (axes[0], none_, "1  Nothing corrected\n"
+                         r"$\varphi,\rho$ straight from the reference stream"),
+        (axes[1], two, "2  Phase and width corrected\n"
+                       r"$\varphi + \frac{1}{16}$,  $\sigma^2 - \Delta'^2/12$"),
+        (axes[2], three, "3  And $\\eta$ corrected\n"
+                         r"$+\,(\Delta'/\Delta)^2 = \frac{1}{64}$"),
+    )
+    for panel, dat, title in panels:
         panel.axhline(0, color=CPRED, lw=1)
-        panel.plot(dat[:, 0], dat[:, 1], "o", color=C1, ms=6, mew=0, alpha=0.85)
+        # Two specimens, distinguished. The replication is the second-strongest
+        # claim in the paper and it should be visible in the figure rather than
+        # only in the caption.
+        for s2, mk, col, lab in ((0.0, "o", C1, "specimen 1"),
+                                 (1.0, "^", CBAD, "specimen 2")):
+            m = dat[:, 2] == s2
+            if m.any():
+                panel.plot(dat[m, 0], dat[m, 1], mk, color=col, ms=5.5, mew=0,
+                           alpha=0.8, label=lab)
         rms = float(np.sqrt(np.mean(dat[:, 1] ** 2)))
+        mean = float(np.mean(dat[:, 1]))
         panel.axhspan(-rms, rms, color=CPRED, alpha=0.12, lw=0)
         panel.set_title(title, fontsize=9.5)
         panel.set_xlabel(r"$\varphi$  (units of $\Delta$)")
         panel.set_xlim(0, 1)
-        panel.annotate(f"RMS {rms:.4f}", (0.5, 0.955), xycoords="axes fraction",
-                       ha="center", fontsize=11, color="#333")
+        panel.annotate(f"RMS {rms:.4f}\nmean {mean:+.4f}",
+                       (0.5, 0.94), xycoords="axes fraction",
+                       ha="center", va="top", fontsize=10, color="#333")
+    axes[2].legend(loc="lower right", fontsize=8, framealpha=0.95)
 
-    # The smooth trend, drawn so the eye sees a systematic and not a cloud.
-    o = np.argsort(raw[:, 0])
-    ax.plot(raw[o, 0], np.convolve(raw[o, 1], np.ones(5) / 5, mode="same"),
-            "-", color=CBAD, lw=1.4, alpha=0.8, zorder=1)
+    # The smooth trend on panel 1, so the eye sees a systematic and not a cloud.
+    o = np.argsort(none_[:, 0])
+    axes[0].plot(none_[o, 0],
+                 np.convolve(none_[o, 1], np.ones(5) / 5, mode="same"),
+                 "-", color=CBAD, lw=1.4, alpha=0.8, zorder=1)
 
-    ax.set_ylabel(r"$\eta_{\mathrm{measured}} - \eta_{\mathrm{exact}}$")
-    ax.set_ylim(-0.95, 0.95)
+    # Panel 2's constant, drawn as the line it is. This is the whole point of
+    # having a middle panel: a flat non-zero offset is a different diagnosis
+    # from a phi-shaped one, and it names its own cause.
+    axes[1].axhline(-ETA_FIX, color="#111", lw=1.6, ls="--", zorder=4,
+                    label=r"$-(\Delta'/\Delta)^2 = -\frac{1}{64}$, predicted")
+    axes[1].legend(loc="lower right", fontsize=8.5, framealpha=0.95)
+
+    axes[0].set_ylabel(r"$\eta_{\mathrm{measured}} - \eta_{\mathrm{exact}}$")
+    axes[0].set_ylim(-0.95, 0.95)
+    axes[1].set_ylim(-0.062, 0.062)
+    axes[1].set_ylabel(r"$\eta_{\mathrm{measured}} - \eta_{\mathrm{exact}}$"
+                       "\n(note the change of scale)", fontsize=9)
+    # Mark on panel 1 how far the next two are zoomed, so the eye is not
+    # invited to compare spreads across the break.
+    axes[0].axhspan(-0.062, 0.062, color="#111", alpha=0.10, lw=0, zorder=0)
+    axes[0].annotate("panels 2--3 span\nthis band only",
+                     (0.03, 0.062), fontsize=7.5, color="#444",
+                     ha="left", va="bottom")
     fig.suptitle("Sheppard's correction, applied to the instrument's own "
-                 "reference channel", fontsize=10.5)
+                 "reference channel --- in all three places it belongs",
+                 fontsize=10.5)
     _save(fig, out)
 
 

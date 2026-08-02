@@ -1,12 +1,8 @@
 % ===========================================================================
-% Rate-register quantisation in MEMS gyroscopes
+% Rate-Register Quantisation Effects in MEMS Gyroscopes
 %
 % BUILD:   latexmk -pdf main.tex          (or: press Ctrl+Alt+B in VS Code)
 % CLEAN:   latexmk -C
-%
-% This file compiles TODAY with the stock `article` class so that nothing
-% blocks you from writing. Switch to the journal class at submission by
-% changing ONE line -- see \documentclass below.
 %
 % NOTHING IN THIS FILE IS THE PAPER. Every section is a stub carrying the
 % argument order and the evidence it has to cite. Prose goes in the section
@@ -24,16 +20,9 @@
 %
 % IEEE TIM -- IEEEtran.cls ships with TeX Live:
 % \documentclass[journal]{IEEEtran}
-%
-% Pick the target EARLY. Column width sets figure aspect ratios, and
-% switching after the figures are drawn means redrawing all of them.
 % ---------------------------------------------------------------------------
 
 \usepackage[T1]{fontenc}
-% lmodern is not cosmetic. With T1 encoding and no scalable font family you
-% get bitmapped Type 3 fonts in the PDF, which look poor on screen and which
-% several publishers reject outright at submission. It also stops microtype
-% failing with "auto expansion is only possible with scalable fonts".
 \usepackage{lmodern}
 \usepackage[utf8]{inputenc}
 \usepackage[british]{babel}
@@ -46,7 +35,9 @@
 \usepackage{siunitx}
 \usepackage[hidelinks]{hyperref}
 \usepackage[capitalise,noabbrev]{cleveref}
-\usepackage{microtype}
+\usepackage{microtype}\setlength{\parskip}{\baselineskip}
+
+
 
 \graphicspath{{../Figures/}}   % figures are NOT copied; they are referenced
                                % where figures.py writes them, so a rerun
@@ -78,8 +69,7 @@
 
 % ===========================================================================
 
-\title{Rate-Register Quantisation in MEMS Gyroscopes:\\
-       Exact Statistics of an Unmeasured Term in Fitted Angle Random Walk}
+\title{Sub-LSB Alignment Effects in MEMS Gyroscope Rate-Register Quantisation\\}
 \author{J. Rhodes}
 \date{\today}
 
@@ -105,14 +95,13 @@ suggested \etaRangeLo{} to \etaRangeHi{}, or the \arwSpan{} span in fitted ARW.}
 \input{sections/08_conclusion}
 
 \section*{Data and code availability}
-\todo{Zenodo DOI. All \nRecords{} \texttt{.sdat} records byte-for-byte, the
+All data and code used to produce the results seen in the paper are publicly available on both Zenodo: (DOI...) and github: (URL...)
+
+\todo{Zenodo DOI and Github URL. All \nRecords{} \texttt{.sdat} records byte-for-byte, the
 HDF5 conversions and their converter, the analysis code at its tagged commit,
 \texttt{summary.csv}, and a SHA-256 manifest.}
 
-\section*{Pre-registration and deviations}
-\todo{One paragraph, and it must be honest about which parts are which. See
-\texttt{PREREGISTRATION.md} in the repository root. The deviations table goes
-in the supplementary material.}
+\todo{Notes on deviations}
 
 \bibliographystyle{unsrt}   % iopart-num for MST; IEEEtran for TIM
 \bibliography{references}

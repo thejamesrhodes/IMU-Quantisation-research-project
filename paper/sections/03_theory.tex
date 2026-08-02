@@ -27,28 +27,38 @@ measurement in \cref{sec:arch}, not assumed.}
   \label{eq:eta}
 \end{equation}
 
+
+
 \subsection{Symbol conventions}
 % NON-NEGOTIABLE. Vaccaro & Zaki (2012) use R for the ARW density and Q for
 % RRW, which collides with IEEE-952's Q AND with the Kalman Q/R. A reader
 % from either community will misread the paper without this table.
 \begin{table}[h]
 \centering
-\caption{Symbols, with the collisions named explicitly.}
+\caption{Symbol Definitions}
 \label{tab:symbols}
 \begin{tabular}{llll}
 \toprule
 Symbol & Meaning & Units & Note \\
 \midrule
 $\Dlsb$   & 16-bit register LSB & \si{\mdps} & \num{61.035} at \SI{\pm2000}{\dps} \\
-$\Dref$   & 20-bit field lattice & $\Dlsb$ & $\Dlsb/8$; see \cref{sec:refquant} \\
-$\rhod$   & $\sigma/\Dlsb$, dither ratio & --- & the independent variable \\
+$\Dref$   & 20-bit field lattice & $\Dlsb$ & $\Dlsb/8$; see \cref{sec:refquant}\\
+$\rhod$   & $\sigma/\Dlsb$, dither ratio & --- & independent variable \\
 $\phase$  & sub-code bias phase & $\Dlsb$ & \textbf{edge}-referenced \\
-$\etaq$   & added power $/(\Dlsb^2/12)$ & --- & $+1$ is the classical limit \\
+$\etaq$   & normalised quantisation power $/(\Dlsb^2/12)$ & --- & $+1$ is the PQN limit \\
+$x$       & 20-bit reference stream & $\Dlsb$ & $\mathrm{gyro}_{20}/16$ \\
+$Q$       & 16-bit register stream & $\Dlsb$ & \textbf{not} Kalman $Q$ or RRW density \\
+$v$       & quantiser input signal & $\Dlsb$ & before quantisation \\
+$\mu$     & sample mean & $\Dlsb$ & mean of $x$ \\
+$\sigma$  & sample standard deviation & $\Dlsb$ & from reference stream only \\
+$\operatorname{Var}(\cdot)$ & variance & $\Dlsb^2$ & sample variance operator \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]\centering
+
+
+\begin{figure}[htbp]\centering
   \includegraphics[width=\linewidth]{fig1_eta_vs_rho.png}
   \caption{\todo{$\etaq$ against $\rhod$, with the band spanning all phases.}}
   \label{fig:etarho}

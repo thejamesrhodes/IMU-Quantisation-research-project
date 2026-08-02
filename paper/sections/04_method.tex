@@ -1,51 +1,261 @@
-\section{Instrument and method}
+\section{Instrumentation and Statistical Methods}
 \label{sec:method}
-
 % ~1000 words.
 
+
+
 \subsection{Instrument}
-% Board; two ICM-42688-P; 32 MHz SYSCLK chosen deliberately because board
-% switching noise acts as dither and would abolish the effect under study --
-% the clock rate is a science parameter, not a performance choice; SD-logged;
-% battery; USB physically disconnected during science runs.
-\todo{Write.}
+The experiment used a custom PCB, consisting of two ICM-42688-P MEMS gyroscopes. The standard 16-bit channel of the ICM-42688-P and the extended 20-bit channel (read from the FIFO buffer) were both read simultaneously over the same physical samples. The use of the 20-bit channel  forces the full-scale range (FSR) to $\pm$\SI{2000}{\degree\per\second} due to a limitation in the device \todo{reference datasheet?}. The relationship between the two is determined in \todo{S5.1 likely}. The two ICM-42688-P devices are referenced as specimen 1 and specimen 2 within the manuscript.
 
-\subsection{Estimators, and the anti-circularity rule}
-% Rule R3, stated structurally and prominently: sigma -- and hence rho --
-% comes ONLY from the 19-bit stream. The 16-bit code histogram is a TEST
-% STATISTIC and is never used to estimate sigma. Obtaining rho under H0 and
-% then using it to test H0 would assume the conclusion. This is the design's
-% principal defence and belongs in the method, not in a footnote.
-\todo{Write.}
+A STM32F723ZET6 microcontroller unit (MCU) was used to collect the sensors readings and log the data to an SD card.  Throughout the experiment, all clock speeds (such as the chosen 32MHz SYSCLK for the MCU, and 8MHz SPI clocks) were kept intentionally constant and low as an experimental control. This was done to avoid the increased electrical noise that occurs with higher clock speeds that could couple into the sensors and act as dither, abolishing the effect under study. Power was supplied through a power-only USB cable with data lines disconnected instead of a battery during all datalogging, as it was found in preliminary testing that the larger connected ground plane reduced a persistent spectral spur. The spur was measured at \SI{119}{\hertz}, with an amplitude of $1.28\Delta$ on battery against $0.42\Delta$ on USB, unknown exact source \todo{further detail?}, which would reduce the gaussianity that the model assumes.
 
-\subsection{The reference channel is itself a quantiser}
+Throughout the experiment, the devices where measured at ODRs of \SIlist{25;50;100;200;500;1000;8000}{\hertz}, and with the AAF filter set to bandwidths of \todo{confirm AAF filter settings range, DS-000347}. The record durations of \todo{confirm record durations}, where derived from \todo{calculatiosn for duration if relevant, cant just say vibes}.
+
+
+
+\subsection{Reference channel quantisation}
 \label{sec:refquant}
 % A genuine methods contribution, and the most transferable thing in the
 % paper: anyone using a higher-resolution channel as ground truth for a
 % lower-resolution one has this problem and will not have corrected for it.
 %
-% The 20-bit field truncates on a Delta/8 lattice, so phi read from it is low
-% by 1/16 Delta and its variance carries Delta'^2/12. Sheppard's own 1898
-% correction, applied to the instrument's reference channel.
+% MUST COME BEFORE THE ESTIMATORS. See the note at the head of this file.
+%
+% THE THREE PLACES IT ENTERS. This is the structure of the subsection, and
+% getting all three named is the whole point -- as of 30 July the campaign had
+% applied two of them and left the third, which is what TN-24 is about.
+%
+%   1. phase     phi read from x is low by Delta'/2 = 1/16 Delta
+%   2. width     Var(x) carries Delta'^2/12 of the reference's own noise
+%   3. eta       eta's numerator is Var(Q) - Var(v), NOT Var(Q) - Var(x), so
+%                it needs +Delta'^2/12 as well -- a constant +1/64 of eta
+%
+% (3) was missed until 30 July. It left a constant -0.0153 +/- 0.0012 offset
+% in every eta in the campaign against a predicted -1/64 = -0.015625, and
+% correcting it cut the sweep residual by 39%. Present all three together as
+% one correction applied in three places, not as two corrections and a later
+% patch: they are the same Delta'^2/12 and the same 1898 paper.
+%
+% STATE THE FACTOR OF TWO EXPLICITLY OR THE READER WILL THINK YOU ARE WRONG.
+% Eq (1) gives x = gyro_20 / 16, from which the field's LSB looks like
+% Delta/16 = 0.0625 Delta -- and a reader who does that arithmetic will
+% conclude the correction is twice too big. It is not: the 20-bit FIFO format
+% carries only 19 significant bits of gyroscope data, so the gyro LSB is
+% always zero and the effective lattice is TWO counts,
+%     Delta' = 2/16 Delta = Delta/8,
+% giving a half-lattice phase offset of Delta'/2 = 1/16 Delta = 0.0625, which
+% is what was measured (+0.0623). One sentence naming the 19 significant bits
+% closes the gap. Cite TDK for the 19-bit figure -- the product page states
+% "19-bits of gyroscope data and 18-bits of accelerometer data"; find it in
+% DS-000347 Rev 1.6 and cite the section, not the web page.
+%
+% WHY PQN IS EXACT FOR THE REFERENCE AND FAILS FOR THE REGISTER -- the one
+% sentence that stops this looking like special pleading. The reference
+% lattice is 8x finer, so rho' = 8 rho = 1.6-2.0 on these records and the
+% Gaussian collapse factor exp(-2 pi^2 rho'^2) is of order 1e-22. The same
+% theory that predicts a 250% departure for the register predicts none at all
+% for the reference. That is a consistency check, not an excuse.
 %
 % The cascade is transparent: because Delta' divides Delta exactly,
 %     floor( floor(x/Delta') Delta' / Delta ) = floor(x/Delta)
 % identically, so Q is unchanged and only Var[x] needs correcting.
-\expl{Found by fitting a free offset to a residual, not predicted in advance.
-The out-of-sample evidence is what makes it defensible: derived from the
-\SI{50}{\hertz} phase sweep, applied unchanged to the independent ODR axis,
-\refImprovement{} residual improvement on data it was not derived from. Say
-this plainly rather than presenting it as a prediction.}
+\expl{Places 1 and 2 were found by fitting a free offset to a residual, not
+predicted in advance; place 3 was found in the residual left by the first two.
+The out-of-sample evidence is what makes all three defensible: derived from
+the \SI{50}{\hertz} phase sweep on one specimen, applied unchanged to the
+independent ODR axis and to a second specimen, \refImprovement{} residual
+improvement on data they were not derived from. The magnitude of place 3 is
+not fitted at all --- it is $(\Dref/\Dlsb)^2 = 1/64$ exactly, and six
+independent groups agree with it to within $1.1\sigma$. Say all of this
+plainly rather than presenting any of it as a prediction.}
 
-\begin{figure}[t]\centering
+\begin{figure}[htbp]\centering
   \includegraphics[width=\linewidth]{fig8_reference_truncation.png}
-  \caption{\todo{Residual against $\phase$, before and after. No free
-  parameters.}}
+  \caption{\todo{Write. The figure is three panels: nothing corrected,
+  $\phase$ and $\rhod$ corrected, and all three places corrected. Both
+  specimens are marked separately and lie on top of each other in panel~1,
+  which is the point --- the systematic is not specimen-specific. Panel~2
+  carries the predicted $-1/64$ line, and panels 2--3 are on a zoomed axis
+  (say so in the caption, the reader must not compare spreads across the
+  break). RMS $0.379 \to 0.019 \to 0.012$; mean $-0.048 \to -0.015 \to
+  +0.000$. No free parameters anywhere.}}
   \label{fig:reftrunc}
 \end{figure}
 
+% A SECOND FIGURE BELONGS IN THIS SUBSECTION, or in the results section --
+% decide, but do not lose it. The software dither sweep (TN-24 s11) validates
+% eta_exact over rho = 0.31 to 3.24 using NONE of the corrections above,
+% because there the input to the simulated quantiser genuinely is continuous.
+% That makes it the answer to "you corrected the reference until the theory
+% fitted": the agreement survives with the correction machinery switched off.
+% It also holds rho fixed while ODR changes by 20x, which is the only clean
+% answer available to "your rho axis is really an ODR axis".
+
+
+
 \subsection{Phase manipulation}
+\label{sec:phasectl}
+% Procedure, so it belongs before the estimators rather than after them.
+%
 % OFFSET_USER steps 0.4995 Delta -- so close to half an LSB that a naive
 % ladder reaches two phases. The MISS from one half is what makes it sweep.
 % A coarse trim register used as a fine phase control.
+%
+% THE COMMANDED PHASE IS NOT THE MEASURED PHASE, and this is the sentence that
+% protects the whole design. The register's job is to MOVE phi, not to place
+% it: eta is always evaluated at the phi measured from that record, never at a
+% phi computed from the step count. So the 15% uncertainty on the step size
+% cannot propagate into the physics. Say it explicitly -- a referee who thinks
+% phi was commanded will ask what happens when the command is wrong.
+%
+% ORDER IN TIME WAS BIT-REVERSED IN k, so corr(phi, time) ~ 0 and any thermal
+% drift over a night is orthogonal to the phase axis instead of confounded
+% with it. Worth one sentence: it converts a bias into scatter, and the
+% ODR-1000 vernier of 30 July shows it working (fit scatter rose, fitted slope
+% did not move).
+%
+% THE STEP SIZE IS ODR-DEPENDENT. [measured] 30 July:
+%     ODR 50    0.499157 +/- 0.000013 (vernier)   0.499189 +/- 0.000049 (mu)
+%     ODR 1000  0.499503 +/- 0.000020 (vernier)   0.499513 +/- 0.000073 (mu)
+% The two estimators agree at each ODR; the two ODRs differ by 14.5 sigma.
+% Consequence for THIS section: a k-ladder designed at one ODR does not sweep
+% the same phases at another, so the ladder is ODR-specific. Consequence for
+% the physics: none, because phi is measured per record. Make both points, in
+% that order, and keep the mechanism speculation in the discussion.
+%
+% COVERAGE COMES FROM THE THREE AXES, NOT FROM k. On specimen 2 the vernier
+% period is 1/eps = 2305 steps, longer than the 2047-step register ceiling, so
+% one sweep in even k reaches only 0.83 of a period. The axes have different
+% intrinsic phases (0.521, 0.340, 0.525) and fill each other's gaps: 3 x 16
+% spans phi = 0.011 to 0.998 with a largest gap of 0.056. The edge region,
+% where eta peaks at 3 - 12 rho^2, is therefore reached ONLY through the axis
+% offsets -- so no axis may be dropped in analysis, and that is a methods
+% statement, not a convenience.
 \todo{Write. Figure to supplementary: fig9\_vernier.png}
+
+
+
+\subsection{Estimators}
+\label{sec:estimator}
+
+Two streams were captured for every record. The 20-bit stream served as the reference measurement,
+\begin{equation}
+  x = \frac{\mathrm{gyro}_{20}}{16},
+  \qquad Q = \mathrm{gyro}_{16},
+  \label{eq:streams}
+\end{equation}
+
+where both $x$ and $Q$ are expressed in units of the register LSB, $\Delta$. By construction, $Q \in \mathbb{Z}$, whereas $x$ is a higher-resolution quantisation of the same underlying continuous rate $v$. As established in \cref{sec:refquant}, the reference lattice is eight times finer than the register lattice ($\Dlsb/\Dref = 8$), though $x$ remains quantised. Let $\mu$ and $\sigma$ denote the mean and standard deviation of $x$. The register is characterised by the following derived quantities:
+
+\begin{equation}
+  \rhod = \sqrt{\sigma^{2} - \Dref^{2}/12}, \qquad
+  \phase = \left(\mu + \tfrac{1}{2}\Dref\right) \bmod 1, \qquad
+  \etaq = \frac{\operatorname{Var}(Q) - \operatorname{Var}(x) + \Dref^{2}/12}
+               {\Dlsb^{2}/12},
+  \label{eq:quantities}
+\end{equation}
+
+Here $\rhod$ denotes the dither ratio, $\phase$ the position of the mean within a code cell, referenced to a code edge, and $\etaq$ is the quantisation noise power introduced by the register, normalised to the PQN model, $\Dlsb^{2}/12$ \todo{reference sheppard -> modern rederivation}.d
+
+All three quantities incorporate the reference-lattice correction derived in \cref{sec:refquant}. The reference quantisation variance, $\Dref^{2}/12$, appears as a subtraction to the variance in the definition of $\rhod$, as the half-cell offset used to reference $\phase$ to a code edge, and as a subtraction from $\operatorname{Var}(x)$ when evaluating $\etaq$. These three corrections are not independent but different manifestations of treating the reference channel $x$ as a quantiser with lattice spacing $\Dref$.
+
+Thus a value of $\etaq = 1$ indicates agreement with the PQN model, whereas a value of $\etaq < 0$ means that the register suppresses variance relative to the unquantised continuous rate $v$. Both $x$ and $Q$ were linearly detrended prior to variance estimation, ensuring that a slow thermal drift does not contribute to their estimated variances.
+
+
+
+\subsection{Choice of estimator, and circularity}
+\label{sec:circularity}
+
+Throughout the analysis, $\sigma$ was estimated solely from the 20-bit reference stream. Estimating $\sigma$ from the 16-bit code histogram would require fitting a likelihood derived from the memoryless, undithered, uniform quantisation model that is subsiquently tested. This would make the analysis circular. The 16-bit code histogram is reserved as an additional, independent test statistic \cref{sec:histograms}, and is never used to estimate $\sigma$.
+
+% ---------------------------------------------------------------------------
+% ONE MORE PARAGRAPH HERE -- precision, and be honest that it is not the
+% reason. This is the old PARAGRAPH 3; paragraphs 1 and 2 are the prose above,
+% which is now about the right length. Do not let this grow.
+%
+% The precision gain from using the 20-bit stream is modest: SE(rho) improves
+% by 4.9x at ODR 25, 1.7x at 50, 1.3x at 100 and 200, 1.1x at 1000 (TN-14
+% s1.2). Largest exactly where the 16-bit histogram collapses toward a single
+% code, which is suggestive but not the argument.
+%
+% Say plainly: the decisive reason is anti-circularity, not precision. A
+% referee who thinks you chose the estimator for its variance will not see the
+% defence.
+%
+% Then SE(eta), from the fourth central moment computed by quadrature over the
+% quantiser cells rather than assumed Gaussian:
+%
+%   SE(eta) = (12/Delta^2) sqrt( (mu_4(y) - Var(y)^2) / N * C )
+%
+% with C a sample-correlation inflation for the ODR-tracking filter.
+% GIVE C A PROVENANCE -- an unexplained inflation factor is the first thing a
+% referee circles. It is now measurable rather than assumed, from the
+% successive-difference ratio: (sigma_diff/sigma)^2 = 1 - r_1, so
+% C = (1+r_1)/(1-r_1) for an AR(1) approximation. Measured 30 July:
+%     ODR 50, default AAF      sigma_diff/sigma 0.94-0.99  r_1 0.02-0.12  C 1.0-1.3
+%     ODR 1000, AAF at floor   sigma_diff/sigma 0.40-0.57  r_1 0.68-0.84  C 5-12
+% So C = 1.3 is defensible for the sweep records -- it is the conservative end
+% of what was measured -- and badly wrong for the narrow-filter records, where
+% SE(eta) is inflated 2.3x to 3.4x. Quote the measured ratio per group rather
+% than one global constant, and give the AR(1) formula so C stops being a
+% number pulled from nowhere.
+%
+% AND THE NUMBER THAT MAKES THIS SECTION WORTH READING: an independent
+% repeatability estimate now exists. Two sweep points repeated five hours
+% later gave sigma_eta = 0.0065 per record (n = 6 pairs, so +/- ~32%), against
+% a post-correction sweep residual of 0.0119 RMS over 96 measurements. State
+% both. The honest reading is that the theory is good to roughly twice the
+% repeatability, not that it is exact -- see TN-24 s5.
+%
+% REPORTING DISCIPLINE, and it belongs here rather than in the results:
+% the headline residual is 0.0119 over ALL 96 measurements. One axis of one
+% specimen (slot-2 Y) contributes disproportionately, and without it the
+% figure is 0.0091 with every covariate correlation falling below
+% significance (TN-24 s9). Report it in that order -- headline, then the
+% concentration, then the sensitivity analysis. Quoting 0.0091 as the result
+% would be outcome-dependent exclusion, which is the exact thing R2 and R4
+% exist to prevent, and a referee who spots it will not believe anything
+% else in the section.
+%
+% The likely cause is worth one clause: slot-2 Y has the highest tail ratio
+% sigma/sigma_robust (1.18 against 1.06-1.15), and eta_exact assumes a
+% Gaussian input, so a residual tracking departure from Gaussianity is the
+% expected failure mode rather than an anomaly.
+% ---------------------------------------------------------------------------
+
+
+
+\subsection{Record selection}
+\label{sec:selection}
+% This was PARAGRAPH 4 of a comment block stranded under the circularity
+% subsection. It belongs here, last, and it must say WHEN the rules were
+% fixed.
+%
+%   - records excluded only by R2 (thermal), R4 (coherent lines) or a CRC
+%     failure; all three specified before the campaign (TN-14 s6, 13 July)
+%   - how many records each criterion actually removed. As of 30 July: of the
+%     45 records on the third night, zero failed CRC, zero overflowed, zero
+%     filled the ring buffer, and every gated record passed R2. Say that
+%     plainly -- a selection subsection that excludes nothing is the strongest
+%     version of this subsection there is.
+%   - R2 is evaluated on the blocked linear drift of the die temperature, NOT
+%     the sample range. The range is an extreme-value statistic: at 6e4
+%     samples it returns ~8.5 sigma_T and therefore measures the thermometer,
+%     not the temperature. Measured on one record: range 823 mK, per-sample
+%     sensor noise 84 mK, actual drift 103 mK.
+%     ** THIS IS A DEVIATION FROM THE PRE-REGISTERED RULE AND MUST BE FLAGGED
+%        AS ONE ** -- it was changed after seeing records fail. The defence is
+%        that the statistic was wrong on its own terms, independently of the
+%        outcome; make that argument rather than hoping nobody asks.
+%   - software versions, and "the analysis was run once". Note honestly that
+%     the analysis was RE-run on 30 July when TN-24 corrected eta, and that
+%     the correction was applied to every record including those already
+%     published in the technical notes, not only to the new ones.
+%
+% ---------------------------------------------------------------------------
+% FORMATTING, applies to the whole section
+%   \SI{}{} for every quantity with a unit; \num{} for bare numbers.
+%   Number an equation only if something refers to it; \eqref{} to refer.
+%   Symbols defined in Table 2 need no redefinition -- point at the table.
+% ===========================================================================
+\todo{Write, one paragraph, following the brief above.}

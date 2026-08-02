@@ -279,6 +279,11 @@ class Stats:
         # NO free parameters, and the same two corrections improve the
         # independent 28 July ODR axis by 76% out of sample.
         #
+        # 30 July: there was a THIRD place it belongs and it had been missed.
+        # See the eta block below -- the same REF_STEP^2/12 also enters eta's
+        # numerator, worth a further 43% of the residual. Two of three is the
+        # kind of half-applied correction that leaves a clean constant behind.
+        #
         # Raw phi/rho are retained so the change is auditable and so anything
         # computed before 29 July 2026 can still be reproduced.
         self.phi_ref = float((self.mu + REF_STEP / 2.0) % 1.0)
@@ -302,9 +307,44 @@ class Stats:
                                - x_lsb[:x_lsb.size // 20].mean())
 
         # eta: added power, normalised by the ideal quantiser variance.
-        self.eta = float((qd.var(ddof=1) - xd.var(ddof=1)) / (1.0 / 12.0))
+        #
+        # THE REFERENCE CORRECTION BELONGS IN THREE PLACES, NOT TWO. TN-23
+        # applied it to phi_ref and to rho_ref and stopped there. eta needs it
+        # as well, and for the same reason: eta_exact(rho, phi) is derived for a
+        # quantiser acting on a CONTINUOUS input, so eta must be referred to
+        # Var(v) for the unobserved continuous v -- not to Var(x), which is
+        # itself a quantisation of v and carries REF_STEP^2/12 of its own.
+        #
+        #     eta_true = [Var(Q) - Var(v)] / (Delta^2/12)
+        #     Var(v)   = Var(x) - REF_STEP^2/12          (exact, see below)
+        #  => eta_true = [Var(Q) - Var(x)] / (Delta^2/12) + REF_STEP^2
+        #
+        # so the missing term is REF_STEP^2 = (1/8)^2 = 1/64 = 0.015625 of eta,
+        # a pure constant with no free parameter. Using Var(x) unmodified biases
+        # every eta in the campaign LOW by exactly that.
+        #
+        # Why Var(v) = Var(x) - REF_STEP^2/12 is exact rather than approximate:
+        # the reference lattice is 8x finer, so rho' = 8 rho is 1.6-2.0 on these
+        # records and the Gaussian collapse factor exp(-2 pi^2 rho'^2) is of
+        # order 1e-22. PQN holds for the reference channel to twenty-two
+        # decimal places even though it fails badly for the register.
+        #
+        # FOUND IN THE RESIDUAL, NOT PREDICTED -- but the magnitude is not
+        # fitted. Measured constant offsets against the predicted 0.015625:
+        #   slot-1 sweep  0.01466 +/- 0.00149    slot-2 sweep  0.01593 +/- 0.00194
+        #   slot-1 repeat 0.01982 +/- 0.00395    ODR-50 ladder 0.01545 +/- 0.00323
+        #   vernier @1000 0.01332 +/- 0.00379    offset ladder 0.01569 +/- 0.00467
+        # Six groups, two specimens, two ODR, all within 1.1 sigma of 1/64.
+        # Residual RMS falls 43% (slot 1) and 36% (slot 2) on correction. TN-24.
+        REF_VAR = REF_STEP ** 2 / 12.0
+        self.eta = float((qd.var(ddof=1) - xd.var(ddof=1) + REF_VAR)
+                         / (1.0 / 12.0))
         self.eta_raw = float((q_lsb.astype(np.float64).var(ddof=1)
-                              - x_lsb.var(ddof=1)) / (1.0 / 12.0))
+                              - x_lsb.var(ddof=1) + REF_VAR) / (1.0 / 12.0))
+        # Pre-TN-24 value, retained so anything computed before 30 July 2026
+        # can still be reproduced. Same audit trail as phi/phi_ref.
+        self.eta_uncorr = float((qd.var(ddof=1) - xd.var(ddof=1))
+                                / (1.0 / 12.0))
 
         codes, counts = np.unique(q_lsb, return_counts=True)
         self.n_codes = int(codes.size)
@@ -848,7 +888,8 @@ SUMMARY_COLS = [
     "battery", "n", "minutes", "verify", "overflows", "ring_full",
     "temp_span_mK", "temp_drift_mK", "gate_mK", "gate", "mu_drift_D",
     "axis", "mu_D", "phi", "rho", "phi_ref", "rho_ref",
-    "eta", "eta_exact", "eta_resid", "sigma_mdps", "codes", "tail_ratio",
+    "eta", "eta_uncorr", "eta_exact", "eta_resid", "sigma_mdps", "codes",
+    "tail_ratio",
     "line_Hz", "line_D", "line_pct_var", "rho_clean",
     "adev_min_mdps", "adev_tau_s", "arw_deg_rthr",
 ]
@@ -951,6 +992,7 @@ def _summarise(path, screen_axis=0, fast=False):
             "rho": round(s.rho, 4),
             "sigma_mdps": round(s.sigma_dps * 1e3, 4),
             "eta": round(s.eta, 4),
+            "eta_uncorr": round(s.eta_uncorr, 4),
             "codes": s.n_codes,
             "tail_ratio": round(s.tail_ratio, 3),
             "line_Hz": round(line_hz, 3),
