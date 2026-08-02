@@ -339,6 +339,41 @@ class Stats:
         REF_VAR = REF_STEP ** 2 / 12.0
         self.eta = float((qd.var(ddof=1) - xd.var(ddof=1) + REF_VAR)
                          / (1.0 / 12.0))
+
+        # ---- Bussgang gain -------------------------------------------------
+        #
+        # eta is only half the story and the corpus said so from the start
+        # (Concept Note v2.3 s3.1). The register does not merely ADD power; it
+        # applies a GAIN to the power already there. Nothing in the campaign
+        # measured it until 30 July.
+        #
+        #     G = Cov(Q, v) / Var(v)
+        #
+        # with v the continuous input, estimated as before by removing the
+        # reference lattice's own variance. Cov(Q, e_ref) is negligible: the
+        # reference is well dithered at rho' = 8 rho, so its error is
+        # independent of everything at the 1e-22 level.
+        #
+        # CLOSED FORM, same Fourier route as eta. With Q = u + e - 1/2 and
+        # e = sum_k sin(2 pi k u)/(pi k), Stein's lemma gives
+        #     E[(u-mu) sin(2 pi k u)] = sigma^2 2 pi k g_k cos(2 pi k mu)
+        # so
+        #     G = 1 + 2 sum_k g_k cos(2 pi k phi),   g_k = exp(-2 pi^2 k^2 rho^2)
+        #
+        # WHY THIS MATTERS MORE THAN eta FOR THE PAPER'S CONSEQUENCE SECTION.
+        # Averaged over a uniform phase prior every cosine integrates to zero,
+        # so E_phi[G] = 1 EXACTLY. The classical model is unbiased across an
+        # ensemble of units -- which is why "fitted ARW is systematically
+        # deflated" was withdrawn (Concept Note v2.3 Z.2) and replaced by the
+        # per-unit sign-indefinite claim. Measured here: mean G = 1.058 +/-
+        # 0.065 over 96 sweep measurements, 0.9 sigma from 1.
+        #
+        # And it is why the 5-10x inflation practice is no defence: inflation
+        # answers an under-estimate, not a GAIN error. At mid-code phase on
+        # these records G falls to 0.135, i.e. G^2 = 0.018 -- the physical
+        # noise is attenuated to under two percent of its true in-band value.
+        var_v = max(xd.var(ddof=1) - REF_VAR, 1e-30)
+        self.gain = float(np.cov(qd, xd, ddof=1)[0, 1] / var_v)
         self.eta_raw = float((q_lsb.astype(np.float64).var(ddof=1)
                               - x_lsb.var(ddof=1) + REF_VAR) / (1.0 / 12.0))
         # Pre-TN-24 value, retained so anything computed before 30 July 2026
@@ -387,6 +422,32 @@ class Stats:
 # ==========================================================================
 # The exact-theory chain: eta(rho, phi) in closed form
 # ==========================================================================
+
+def gain_exact(rho: float, phi: float, K: int = 400) -> float:
+    r"""Bussgang gain of a truncating uniform quantiser, Gaussian input.
+
+        G = 1 + 2 sum_{k>=1} exp(-2 pi^2 k^2 rho^2) cos(2 pi k phi)
+
+    Same Fourier route as eta_exact: with Q = u + e - 1/2 and the sawtooth
+    e = sum_k sin(2 pi k u)/(pi k), Stein's lemma gives
+    E[(u-mu) sin(2 pi k u)] = sigma^2 2 pi k g_k cos(2 pi k mu), so
+    G = 1 + Cov(u,e)/Var(u) collapses onto the same g_k.
+
+    Two properties worth knowing before using it:
+
+      E_phi[G] = 1 EXACTLY for a uniform phase prior, because every cosine
+      integrates to zero. The classical model is unbiased over an ensemble of
+      units -- so the error is a per-unit lottery, not a bias. This is the
+      analytical basis for Concept Note v2.3 Z.2 and it is why the
+      "systematically deflated" claim was withdrawn.
+
+      G < 1 at mid-code means the register ATTENUATES the physical noise.
+      No amount of inflating a fitted density defends against that.
+    """
+    k = np.arange(1, K + 1, dtype=np.float64)
+    g = np.exp(-2.0 * np.pi ** 2 * k ** 2 * rho ** 2)
+    return float(1.0 + 2.0 * np.sum(g * np.cos(2.0 * np.pi * k * phi)))
+
 
 def eta_exact(rho: float, phi: float, K: int = 400) -> float:
     r"""Added-power ratio for a TRUNCATING uniform quantiser, Gaussian input.
@@ -888,7 +949,8 @@ SUMMARY_COLS = [
     "battery", "n", "minutes", "verify", "overflows", "ring_full",
     "temp_span_mK", "temp_drift_mK", "gate_mK", "gate", "mu_drift_D",
     "axis", "mu_D", "phi", "rho", "phi_ref", "rho_ref",
-    "eta", "eta_uncorr", "eta_exact", "eta_resid", "sigma_mdps", "codes",
+    "eta", "eta_uncorr", "eta_exact", "eta_resid",
+    "gain", "gain_exact", "gain_resid", "sigma_mdps", "codes",
     "tail_ratio",
     "line_Hz", "line_D", "line_pct_var", "rho_clean",
     "adev_min_mdps", "adev_tau_s", "arw_deg_rthr",
@@ -993,6 +1055,9 @@ def _summarise(path, screen_axis=0, fast=False):
             "sigma_mdps": round(s.sigma_dps * 1e3, 4),
             "eta": round(s.eta, 4),
             "eta_uncorr": round(s.eta_uncorr, 4),
+            "gain": round(s.gain, 4),
+            "gain_exact": round(gain_exact(s.rho_ref, s.phi_ref), 4),
+            "gain_resid": round(s.gain - gain_exact(s.rho_ref, s.phi_ref), 4),
             "codes": s.n_codes,
             "tail_ratio": round(s.tail_ratio, 3),
             "line_Hz": round(line_hz, 3),
