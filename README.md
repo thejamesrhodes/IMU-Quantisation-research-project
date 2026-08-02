@@ -1,7 +1,7 @@
 # Sheppard — MEMS rate-register quantisation testbed
 
 Hardware, firmware and analysis for an experiment on quantisation noise in MEMS
-gyroscopes that output **rate registers** rather than angle increments.
+gyroscopes that output rate registers rather than angle increments.
 
 The claim under test is that rate-register quantisation shows up at a $-1/2$
 Allan slope and gets absorbed into fitted angle random walk, rather than
@@ -71,8 +71,6 @@ python offset_fit.py "../../Test Datasets" --glob "*ph_k*.sdat"
 ## Flashing without an ST-LINK
 
 The board reflashes itself over the same USB-C cable that carries the console.
-TN-17A is the procedure, TN-17 is why it works that way — briefly, the F72x ROM
-bootloader only exposes DFU on OTG_FS, which isn't routed to the connector.
 
 Run `sheppard_selftest.py` once before trusting the flasher. It feeds the board
 bad data five ways and checks each one is refused with flash untouched. Nothing
@@ -84,6 +82,7 @@ SWD recovery is always there:
 STM32_Programmer_CLI -c port=SWD mode=UR -e all -w "Debug/GMWM STM32.elf" -v -rst
 ```
 
+<<<<<<< HEAD
 ## Technical notes
 
 TN-16 first if you're bringing up hardware — its bus↔chip-select table and
@@ -98,15 +97,14 @@ the reference correction had been applied to two of the three places it
 belongs, which left every $\eta$ in the campaign low by exactly $1/64$. All
 of them are superseded.
 
+=======
+>>>>>>> 0167918a47f5640e18c24b422ead0c7c6cab9609
 ## Conventions
-
-Claims in the notes are tagged **[fact]**, **[measured]**, **[inference]** or
-**[verify]**. `[verify]` means load-bearing and not yet checked against a primary
-source — treat it accordingly.
 
 SI units. LaTeX for maths. Campaign data goes to Zenodo with a DOI, not into
 this repository.
 
+<<<<<<< HEAD
 ## Method notes
 
 Which parts of this were fixed before the data and which were found by looking
@@ -119,6 +117,8 @@ Run plans carry their reasoning in the file. `Test Datasets/plan_*.txt` each
 state what the run is for, what the expected outcome is, and what would change
 my mind, written before the run rather than after.
 
+=======
+>>>>>>> 0167918a47f5640e18c24b422ead0c7c6cab9609
 ## Status
 
 94 records, two specimens, three axes. The architecture is identified
