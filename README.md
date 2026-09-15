@@ -1,7 +1,7 @@
-# Sheppard — a MEMS rate-register quantisation testbed
+# Sheppard MEMS Rate-Register Quantisation Research Project
 
 Custom STM32F723 hardware, firmware and analysis for measuring output-register
-quantisation noise in MEMS **rate** gyroscopes — the parts that report an
+quantisation noise in MEMS **rate** gyroscopes. Specifically gyroscopes that report an
 angular-rate register rather than an integrated angle increment.
 
 ![Status](https://img.shields.io/badge/status-pre--publication-orange)
@@ -11,13 +11,12 @@ angular-rate register rather than an integrated angle increment.
 ![Analysis](https://img.shields.io/badge/analysis-Python_%2B_R-blue)
 
 *This is a pre-publication research project. The preprint is **not yet released**;
-the results, figures and numbers in this repository are working values — some
-still gated on a repeat run — and are subject to change. Nothing here has been
-peer-reviewed.*
+the results, figures and numbers in this repository are working values and are subject to change. 
+Nothing here has been peer-reviewed.*
 
 ---
 
-## The claim under test
+## Claim
 
 Rate-register quantisation is predicted to appear at a $-1/2$ Allan-deviation
 slope and to be absorbed silently into the fitted angle random walk (ARW),
@@ -53,7 +52,7 @@ applied to it before it can serve as a reference at all (TN-23).
 
 ---
 
-## What the project sets out to do
+## Project Goals
 
 - Test whether the fitted stochastic-noise parameters of a MEMS IMU transfer
   across ODR and FSR, and return a single configuration-invariant parameter set
@@ -83,14 +82,13 @@ applied to it before it can serve as a reference at all (TN-23).
 
 | Item | Status |
 | --- | --- |
-| Data-logger PCB (4× IMU) brought up and logging | ✅ Complete |
-| Firmware / unattended instrument | ✅ Complete |
+| Data-logger PCB (4× IMU) Bring up | ✅ Complete |
+| Firmware | ✅ Complete |
 | Analysis chain ($\sigma$, $\rho$, $\mu$, $\varphi$, $\eta$; Allan; GMWM) | ✅ Complete |
 | Exact $\eta(\rho,\varphi)$ theory, closed form | ✅ Validated |
 | Primary curve $\eta(\rho)$ | ✅ Measured over a decade of $\rho$ |
-| Controlled phase sweep vs exact theory | ✅ 0.4 % of range, no free parameters, both specimens |
+| Experimental results vs exact theory | ✅ 0.4 % of range, no free parameters, both specimens |
 | Relevance evidence (toolchain guidance, default ODR/FSR) | 🚧 In progress |
-| Software-dither sweep | 🚧 In progress |
 | Manuscript | 🚧 Skeleton in `paper/` |
 | Preprint | ⏳ Not yet released |
 
@@ -187,20 +185,6 @@ derivation and measurement of the Bussgang gain $G(\rho)$.
 > the reference correction had been applied to only two of the three places it
 > belongs, which left every $\eta$ in the campaign low by exactly $1/64$. Those
 > earlier values are superseded.
-
----
-
-## Pre-registration and exploratory findings
-
-Which parts of this were fixed before the data and which were found by looking
-at it is set out in `paper/sections/07_limitations.tex` and in the `\expl{}`
-markers through the manuscript. Anything marked exploratory was found in the
-residuals, not predicted — the reference-truncation correction of TN-23 above
-all. Read that before citing any of it.
-
-Run plans carry their reasoning in the file. Each `Test Datasets/plan_*.txt`
-states what the run is for, what the expected outcome is, and what would change
-my mind — written before the run rather than after.
 
 ---
 
