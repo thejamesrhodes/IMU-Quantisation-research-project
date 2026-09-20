@@ -2,24 +2,19 @@
 
 Version {{VERSION}} · built {{BUILT}} · DOI {{DOI}}
 
-> **The sensors do not move.** Every record is a stationary static-bench
-> measurement. The board was clamped and motionless throughout, no rotation
-> was applied, and the only quantities deliberately varied are the output data
-> rate and the sub-LSB bias offset. There is no motion, trajectory or attitude
-> ground truth here, and none is implied. If you need a moving IMU, this is
-> not that dataset.
+{{N_RECORDS}} static-bench records from two ICM-42688-P MEMS gyroscopes (TDK
+InvenSense). The sensors were stationary throughout: the board was clamped
+and motionless, no rotation was applied, and no motion or attitude ground truth
+is included.
 
-{{N_RECORDS}} records from two ICM-42688-P MEMS gyroscopes (TDK InvenSense).
-Each record captures the standard 16-bit rate register and the extended
-high-resolution channel **over the same physical samples**, so the two streams
-are digitisations of one shared input at resolutions differing by a factor of
-eight.
+Each record captures the device's 16-bit rate register alongside its extended
+high-resolution output channel over the same physical samples, so the two
+streams are digitisations of one shared input at resolutions differing by a
+factor of eight. Samples are stored as raw integer codes with no scaling or
+calibration applied, preserving the output code lattice that calibrated
+floating-point datasets discard.
 
-Samples are stored as **raw integer codes**. No scaling, calibration or
-conversion to physical units has been applied, so the code lattice the two
-streams sit on is intact and recoverable.
-
-{{N_SAMPLES}} samples, {{HOURS}} hours of logging, three axes per record.
+Totals: {{N_SAMPLES}} samples, {{HOURS}} hours, three axes per record.
 
 ---
 
@@ -46,9 +41,10 @@ python read_sdat.py info   records/<one>.sdat # header and achieved rate
 python read_sdat.py export records/<one>.sdat -o out.npz
 ```
 
-`export` writes `gyro20`, `gyro16`, `accel20`, `temp` and `tmst` as integer
-code arrays. No scaling is applied; `sensor.delta_mdps` in each header carries
-the scale factor for that record.
+`export` writes the decoded integer code arrays `gyro20`, `gyro16`, `accel20`,
+`temp_raw`, `tmst_raw`, `tmst_us`, `block_index` and `block_t_us`, together with
+`header_json`, so the exported file is self-describing. No scaling is applied;
+`sensor.delta_mdps` in each header carries the scale factor for that record.
 
 ## 3. What is measured
 
@@ -66,7 +62,7 @@ the scale factor for that record.
 | Orientation | fixed for the whole campaign |
 
 The system clock was held fixed and low across the campaign as an experimental
-control: digital switching noise couples into the sensor and acts as dither.
+control so digital switching noise does not couple into the sensor and act as dither.
 
 ## 4. Word length and the 19-bit convention
 
@@ -82,7 +78,7 @@ The register word is the reference word truncated by three bits,
 gyro16 == gyro19 >> 3
 ```
 
-which holds exactly in all {{N_WORDS}} words — a floor, not a rounding.
+which holds exactly in all {{N_WORDS}} words.
 
 ## 5. Characteristics a reuser should know
 
@@ -90,7 +86,7 @@ which holds exactly in all {{N_WORDS}} words — a floor, not a rounding.
 per-payload CRC-32, packet-header and timestamp-continuity checks. Zero FIFO
 overflows and zero buffer-full events across the set.
 
-**A spectral line near 119 Hz is present in the records.** Its origin has not
+A spectral line near 119 Hz is present in the records. Its origin has not
 been identified. It aliases differently at each output rate, so it appears at a
 different frequency and amplitude in each group. Measured, in units of Δ:
 
@@ -112,9 +108,10 @@ correlate neighbouring samples at every rate. Estimators assuming independence
 will be optimistic.
 
 **Anti-alias filter records.** The seven `42Hz_floor` records vary the filter at
-a fixed output rate. Changing that filter also changes the line amplitude above
-and the correlation between samples, so the setting is not a clean
-single-variable axis. They are included for completeness.
+output rates of 50, 200 and 1000 Hz, each paired against default-filter records
+at the same rate. Changing that filter also changes the line amplitude above and
+the correlation between samples, so the setting is not a clean single-variable
+axis. They are included for completeness.
 
 **Temperature.** The die temperature is logged. `temp_span_mK` and
 `temp_drift_mK` in `summary.csv` give the excursion and the end-to-end drift
@@ -156,5 +153,5 @@ each bundle, so an unpacked archive can be checked record by record.
 
 ## 9. Licence
 
-Records and `summary.csv`: **CC-BY-4.0** (`LICENSE-DATA.txt`).
-`read_sdat.py`: **MIT** (`LICENSE-CODE.txt`).
+Records and `summary.csv`: CC-BY-4.0 (`LICENSE-DATA.txt`).
+`read_sdat.py`: MIT (`LICENSE-CODE.txt`).

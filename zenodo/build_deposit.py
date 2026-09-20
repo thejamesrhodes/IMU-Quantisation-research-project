@@ -71,6 +71,9 @@ REF_STEP = 2.0 / FINE_PER_LSB   # = 0.125 = Delta/8, the 19-bit lattice step
 
 HEADER_BYTES = 4096
 
+# Fixed ZIP entry timestamp, so bundles are byte-reproducible.
+ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
+
 _NOTE = "T" + "N-"
 
 # The one internal cross-reference that lives inside the records themselves:
@@ -340,7 +343,14 @@ def bundle(record_dir: str, out_dir: str, assign: dict, patch: bool) -> dict:
                         n_patched += 1
                     data = new
                 h_dep = hashlib.sha256(data).hexdigest()
-                zf.writestr(n, data)
+                # Fixed timestamp and mode. ZIP stores an mtime per entry, so
+                # without this every rebuild produces different bytes for
+                # identical content -- which means a text-only edit forces a
+                # 100 MB re-upload and invalidates the manifest's zip hashes.
+                zi = zipfile.ZipInfo(n, date_time=ZIP_EPOCH)
+                zi.compress_type = zipfile.ZIP_DEFLATED
+                zi.external_attr = 0o644 << 16
+                zf.writestr(zi, data, compresslevel=9)
                 rows.append((n, h_orig, h_dep))
         digests[zip_name] = rows
         print(f"  {zip_name:<38} {len(names):>3} records  "
