@@ -88,13 +88,13 @@ GATE_RULE_FROM = (_NOTE + "14 R2").encode()
 GATE_RULE_TO = b"thermal"
 
 FAMILIES = [
-    ("phase-sweep", "sheppard-phase-sweep.zip",
+    ("phase-sweep", "icm42688p-phase-sweep.zip",
      lambda lb: lb.startswith(("ph_k", "s2ph_k", "c1_k", "s1rep_k"))),
-    ("aaf-variation", "sheppard-aaf-variation.zip",
+    ("aaf-variation", "icm42688p-aaf-variation.zip",
      lambda lb: lb.endswith("_fl") or lb.startswith("aaf")),
-    ("odr-sweep", "sheppard-odr-sweep.zip",
+    ("odr-sweep", "icm42688p-odr-sweep.zip",
      lambda lb: "_odr" in lb),
-    ("offset-calibration", "sheppard-offset-calibration.zip",
+    ("offset-calibration", "icm42688p-offset-calibration.zip",
      lambda lb: True),
 ]
 

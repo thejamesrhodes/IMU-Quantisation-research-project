@@ -194,9 +194,9 @@ when it is public.
 Campaign data is archived to Zenodo under its own DOI and is not held in this
 repository:
 
-> Rhodes, J. (2026). *Static-bench gyroscope records for rate-register
-> quantisation analysis: paired 16-bit register and 19-bit FIFO streams from
-> two ICM-42688-P specimens* (Version 1.0.0) [Data set]. Zenodo.
+> Rhodes, J. (2026). *Paired 16-bit and 19-bit output records from two
+> ICM-42688-P MEMS gyroscopes across output-rate and sub-LSB bias-offset
+> sweeps* (Version 1.0.0) [Data set]. Zenodo.
 > <https://doi.org/10.5281/zenodo.22860516>
 
 `zenodo/` holds the build script and templates that assemble that deposit from

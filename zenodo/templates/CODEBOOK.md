@@ -3,9 +3,10 @@
 Version {{VERSION}} · built {{BUILT}} · DOI {{DOI}}
 
 `summary.csv` has {{N_ROWS}} rows, one per record per gyroscope axis, and
-{{N_RECORDS}} distinct records. Every column is either configuration read from
-the record header or a moment computed from that record's own samples. No
-column is fitted, corrected toward a model, or compared against a prediction.
+{{N_RECORDS}} distinct records, all taken with the sensors stationary. Every
+column is either configuration read from the record header or a moment computed
+from that record's own samples. No column is fitted, corrected toward a model,
+or compared against a prediction.
 
 Quantities derived from these columns are given in §3 as closed-form
 expressions, so that a reader applies them explicitly rather than inheriting

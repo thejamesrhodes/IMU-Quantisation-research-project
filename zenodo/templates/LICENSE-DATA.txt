@@ -37,8 +37,9 @@ Notices:
 
 Suggested attribution:
 
-  Rhodes, J. Static-bench gyroscope records for rate-register quantisation
-  analysis. Zenodo. {{DOI}}
+  Rhodes, J. Paired 16-bit and 19-bit output records from two ICM-42688-P MEMS
+  gyroscopes across output-rate and sub-LSB bias-offset sweeps. Zenodo.
+  https://doi.org/{{DOI}}
 
 The full licence text is at:
 

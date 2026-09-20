@@ -1,14 +1,25 @@
-# Static-bench gyroscope records: paired 16-bit register and 19-bit FIFO streams
+# Paired 16-bit and 19-bit output records from two ICM-42688-P MEMS gyroscopes across output-rate and sub-LSB bias-offset sweeps
 
 Version {{VERSION}} · built {{BUILT}} · DOI {{DOI}}
 
-{{N_RECORDS}} records from two ICM-42688-P MEMS gyroscopes on a static bench.
-Each record captures the standard 16-bit rate register and the extended
-high-resolution FIFO channel **over the same physical samples**, so the two
-streams are digitisations of one shared input at resolutions differing by a
-factor of eight.
+> **The sensors do not move.** Every record is a stationary static-bench
+> measurement. The board was clamped and motionless throughout, no rotation
+> was applied, and the only quantities deliberately varied are the output data
+> rate and the sub-LSB bias offset. There is no motion, trajectory or attitude
+> ground truth here, and none is implied. If you need a moving IMU, this is
+> not that dataset.
 
-{{N_SAMPLES}} FIFO samples, {{HOURS}} hours of logging, three axes per record.
+{{N_RECORDS}} records from two ICM-42688-P MEMS gyroscopes (TDK InvenSense).
+Each record captures the standard 16-bit rate register and the extended
+high-resolution channel **over the same physical samples**, so the two streams
+are digitisations of one shared input at resolutions differing by a factor of
+eight.
+
+Samples are stored as **raw integer codes**. No scaling, calibration or
+conversion to physical units has been applied, so the code lattice the two
+streams sit on is intact and recoverable.
+
+{{N_SAMPLES}} samples, {{HOURS}} hours of logging, three axes per record.
 
 ---
 
@@ -28,7 +39,7 @@ factor of eight.
 
 ```bash
 pip install numpy
-unzip sheppard-phase-sweep.zip -d records/
+unzip icm42688p-phase-sweep.zip -d records/
 
 python read_sdat.py verify records/*.sdat     # CRC and continuity, per record
 python read_sdat.py info   records/<one>.sdat # header and achieved rate
@@ -51,7 +62,8 @@ the scale factor for that record.
 | Anti-alias filter | `585Hz_default` (87 records), `42Hz_floor` (7 records) |
 | Logger | STM32F723ZET6, 32 MHz system clock, 8 MHz SPI, microSD |
 | Supply | USB, all records |
-| Orientation | fixed; the board was stationary throughout |
+| Motion | none — stationary, clamped, no applied rotation |
+| Orientation | fixed for the whole campaign |
 
 The system clock was held fixed and low across the campaign as an experimental
 control: digital switching noise couples into the sensor and acts as dither.
@@ -137,10 +149,10 @@ each bundle, so an unpacked archive can be checked record by record.
 
 ## 8. Citation
 
-> Rhodes, J. ({{BUILT}}). *Static-bench gyroscope records for rate-register
-> quantisation analysis: paired 16-bit register and 19-bit FIFO streams from two
-> ICM-42688-P specimens* (Version {{VERSION}}) [Data set]. Zenodo.
-> {{DOI}}
+> Rhodes, J. ({{BUILT}}). *Paired 16-bit and 19-bit output records from two
+> ICM-42688-P MEMS gyroscopes across output-rate and sub-LSB bias-offset
+> sweeps* (Version {{VERSION}}) [Data set]. Zenodo.
+> <https://doi.org/{{DOI}}>
 
 ## 9. Licence
 
