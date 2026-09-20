@@ -1,22 +1,29 @@
-# Sheppard — MEMS rate-register quantisation testbed
+# Sheppard — a MEMS rate-gyroscope quantisation testbed
 
-Hardware, firmware and analysis for an experiment on quantisation noise in MEMS
-gyroscopes that output rate registers rather than angle increments.
+Hardware, firmware and host-side analysis for characterising quantisation in
+MEMS gyroscopes that output a rate register rather than angle increments.
 
-The claim under test is that rate-register quantisation shows up at a $-1/2$
-Allan slope and gets absorbed into fitted angle random walk, rather than
-appearing as the $-1$ slope angle-quantisation term in IEEE-952 — which belongs
-to FOG and RLG parts that output angle increments. If that's right, fitted noise
-parameters depend on the configuration they were measured at, and the
-$\sqrt{\text{ODR}}$ transfer rule built into every IMU calibration toolchain has
-never been checked for modern high-ODR parts.
+The instrument captures a gyroscope's standard 16-bit rate register alongside
+its extended high-resolution FIFO channel over the same physical samples, so
+the two streams are digitisations of one shared input and the finer channel can
+serve as a reference for the coarser one. Records are written to SD in a
+self-describing binary format and reduced by the Python tools in
+`GMWM Software/tools/`.
 
 The board is named after W. F. Sheppard, whose 1898 paper gave the $-c^2/12$
 correction for the variance of grouped data
-([DOI](https://doi.org/10.1112/plms/s1-29.1.353)). That's the same
-$\Delta^2/12$ the whole experiment turns on. It also turned up in an unexpected
-place: the 20-bit reference stream is itself a quantiser, and needs Sheppard's
-correction applied to it before it can be used as a reference at all (TN-23).
+([DOI](https://doi.org/10.1112/plms/s1-29.1.353)).
+
+## Data
+
+The measurement records are not in this repository. They are archived as a
+citable dataset:
+
+> *Static-bench gyroscope records for rate-register quantisation analysis.*
+> Zenodo. DOI: **(pending)**
+
+`zenodo/` holds the build script and templates that assemble that deposit from
+a local record directory. See `zenodo/RELEASE.md`.
 
 ## Hardware
 
@@ -28,22 +35,18 @@ correction applied to it before it can be used as a reference at all (TN-23).
 | Host link | USB-C on OTG_HS, internal HS PHY |
 | Power | 4S NiMH or USB-C |
 
-The 32 MHz clock is a science parameter, not a performance choice. Digital
-switching noise acts as dither: more of it raises $\rho$ and abolishes the
-effect being measured. It stays fixed across a campaign or gets logged as a
-treatment variable.
+The 32 MHz system clock is an experimental control, not a performance choice.
+Digital switching noise acts as dither on the quantity under study, so clock
+rates are held fixed across a campaign or logged as a treatment variable.
 
 ## Layout
 
 ```
-GMWM Software/          STM32CubeIDE firmware project
-  Core/                   application sources
-  tools/                  host-side Python (console, analysis, figures)
+GMWM Software/                 STM32CubeIDE firmware project
+  Core/                          application sources
+  tools/                         host-side Python (console, analysis, figures)
 Array Electronics ICM42688P/   KiCad 10 project
-paper/                  LaTeX manuscript
-Figures/                generated — do not edit by hand
-Test Datasets/          records (gitignored; they go to Zenodo)
-TN-*.md                 technical notes
+zenodo/                        dataset deposit build system
 ```
 
 ## Running it
@@ -53,20 +56,31 @@ pip install pyserial numpy matplotlib
 python "GMWM Software/tools/sheppard_console.py"
 ```
 
-The console is a GUI with five tabs: a terminal, the SD card browser, the
-campaign plan editor, an analysis runner, and a figure viewer that renders the
-plots in-app. It finds the board by USB ID rather than COM port and reconnects
-on its own when the board resets.
+The console is a GUI with five tabs: a terminal, an SD card browser, a campaign
+plan editor, an analysis runner, and a figure viewer. It finds the board by USB
+ID rather than COM port and reconnects on its own when the board resets.
 
 Everything it does is also available from the command line, and the panel prints
 the exact command before it runs it, so a result in the GUI and a result in a
 terminal are the same result.
 
 ```
-python analyse.py summary "../../Test Datasets" -o "../../Test Datasets/summary.csv" --fast
-python figures.py "../../Test Datasets/summary.csv" -o "../../Figures"
-python offset_fit.py "../../Test Datasets" --glob "*ph_k*.sdat"
+python analyse.py summary <record-dir> -o summary.csv --fast
+python figures.py summary.csv -o <figure-dir>
+python sdat.py verify <record-dir>/*.sdat
 ```
+
+## Record format
+
+Each `.sdat` file opens with a 4 KiB UTF-8 JSON header carrying the firmware
+version and build tag, board UID, clock tree, sensor part and slot, the full
+sensor configuration and a verbatim readback of the configuration registers.
+The payload is fixed 4 KiB blocks, each a 32-byte header plus the vendor's
+20-byte FIFO packets, with CRC-32 over every payload.
+
+`sdat.py` reads and verifies the format and depends only on the standard library
+and numpy. It is documented in the dataset deposit, which ships a standalone
+copy so the records can be read without this repository.
 
 ## Flashing without an ST-LINK
 
@@ -82,52 +96,15 @@ SWD recovery is always there:
 STM32_Programmer_CLI -c port=SWD mode=UR -e all -w "Debug/GMWM STM32.elf" -v -rst
 ```
 
-<<<<<<< HEAD
-## Technical notes
-
-TN-16 first if you're bringing up hardware — its bus↔chip-select table and
-failure-mode list are most of the time it took to get the board alive. TN-20 is
-the campaign handover. TN-21 through TN-24 are the results: the OFFSET_USER step
-size and the vernier phase ladder, the R2 estimator error, the phase sweep with
-the reference-truncation correction, and the third place that correction
-belonged.
-
-**Read TN-24 before quoting a number from any earlier note.** It found that
-the reference correction had been applied to two of the three places it
-belongs, which left every $\eta$ in the campaign low by exactly $1/64$. All
-of them are superseded.
-
-=======
->>>>>>> 0167918a47f5640e18c24b422ead0c7c6cab9609
 ## Conventions
 
-SI units. LaTeX for maths. Campaign data goes to Zenodo with a DOI, not into
-this repository.
+SI units throughout. The gyroscope's high-resolution FIFO field is 20 bits
+wide, of which 19 are significant for the gyroscope at ±2000 °/s full scale —
+the field's least significant bit is always zero. All resolutions in this
+repository and in the dataset are quoted on the 19-bit convention, so the
+reference lattice step is $\Delta' = \Delta/8$ and the register word is
+`gyro19 >> 3`.
 
-<<<<<<< HEAD
-## Method notes
+## Licence
 
-Which parts of this were fixed before the data and which were found by looking
-at it is set out in `paper/sections/07_limitations.tex` and in the `\expl{}`
-markers through the manuscript. Anything marked exploratory was found in the
-residuals, not predicted — the reference-truncation correction of TN-23 above
-all. Read that before citing any of it.
-
-Run plans carry their reasoning in the file. `Test Datasets/plan_*.txt` each
-state what the run is for, what the expected outcome is, and what would change
-my mind, written before the run rather than after.
-
-=======
->>>>>>> 0167918a47f5640e18c24b422ead0c7c6cab9609
-## Status
-
-94 records, two specimens, three axes. The architecture is identified
-(truncation, bit-exact), $\eta(\rho)$ is measured over a decade of $\rho$, and
-a controlled phase sweep tracks the exact theory to **0.4% of its range with no
-free parameters — on both specimens independently**. Repeatability is measured
-at $\sigma_\eta = 0.0065$, so the theory is good to about twice the noise floor
-of the apparatus.
-
-Manuscript is a skeleton in `paper/`. The bench work the preprint needs is
-done; what is left is desk work — the relevance evidence, the software dither
-sweep, and writing it.
+MIT — see `LICENSE`. The dataset is licensed separately under CC-BY-4.0.
