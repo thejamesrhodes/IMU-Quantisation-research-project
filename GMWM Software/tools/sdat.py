@@ -54,6 +54,7 @@ with nothing installed.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import struct
@@ -748,9 +749,30 @@ def main(argv=None) -> int:
     p.set_defaults(func=cmd_selftest)
 
     args = ap.parse_args(argv)
+
+    # Expand directories and unexpanded wildcards.  Windows PowerShell and cmd
+    # do not glob, so `verify records/*.sdat` -- the command the documentation
+    # gives -- arrives here as a literal string.  Without this it fails with a
+    # traceback on the most common desktop platform.
+    files = getattr(args, "file", None)
+    if files is not None:
+        single = isinstance(files, str)
+        out = []
+        for f in ([files] if single else files):
+            if os.path.isdir(f):
+                out += sorted(glob.glob(os.path.join(f, "*.sdat")))
+            elif any(c in f for c in "*?["):
+                out += sorted(glob.glob(f))
+            else:
+                out.append(f)
+        if not out:
+            print("error: no records matched", file=sys.stderr)
+            return 2
+        args.file = out[0] if single else out
+
     try:
         return args.func(args)
-    except (ValueError, RuntimeError) as e:
+    except (ValueError, RuntimeError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
 

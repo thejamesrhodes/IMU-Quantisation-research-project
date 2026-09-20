@@ -36,15 +36,50 @@ Totals: {{N_SAMPLES}} samples, {{HOURS}} hours, three axes per record.
 pip install numpy
 unzip icm42688p-phase-sweep.zip -d records/
 
-python read_sdat.py verify records/*.sdat     # CRC and continuity, per record
-python read_sdat.py info   records/<one>.sdat # header and achieved rate
+python read_sdat.py verify records              # CRC and continuity, per record
+python read_sdat.py info   records/<one>.sdat  # header and achieved rate
+python read_sdat.py rate   records/<one>.sdat  # board clock vs sensor clock
 python read_sdat.py export records/<one>.sdat -o out.npz
 ```
 
 `export` writes the decoded integer code arrays `gyro20`, `gyro16`, `accel20`,
 `temp_raw`, `tmst_raw`, `tmst_us`, `block_index` and `block_t_us`, together with
-`header_json`, so the exported file is self-describing. No scaling is applied;
-`sensor.delta_mdps` in each header carries the scale factor for that record.
+`header_json`, so the exported file is self-describing. No scaling is applied.
+
+### Physical units
+
+Three things to get right before scaling the codes.
+
+1. `gyro20` is a 20-bit field of which 19 bits are significant, so
+   `sensor.hires_lsb_per_dps` applies to `gyro20 >> 1` and not to `gyro20`.
+   Dividing `gyro20` by it directly gives a rate twice too large.
+2. `sensor.gyro_lsb_per_dps` and `sensor.hires_lsb_per_dps` are rounded to
+   three or four figures, which is a 0.1% scale error. `sensor.delta_mdps` is
+   not rounded. Scale from it.
+3. `tmst_us` is the sensor's own timestamp counter, which runs about 5% fast
+   against the board's crystal-derived timer. Use `odr_measured_hz` from
+   `summary.csv` as the sample rate; use `tmst_us` for ordering and gap
+   detection only.
+
+```python
+import json, numpy as np
+
+z = np.load("out.npz")
+D = json.loads(str(z["header_json"]))["sensor"]["delta_mdps"] / 1000   # deg/s
+
+reference_dps = (z["gyro20"] >> 1) * (D / 8)    # 19-bit channel
+register_dps  =  z["gyro16"]       *  D         # 16-bit register
+```
+
+Both channels are the same physical samples at resolutions differing by a
+factor of eight. Their means differ by roughly half a register LSB, which is
+the truncation offset and not an error.
+
+### If you only want the derived quantities
+
+`summary.csv` is 47 kB and carries the per-record per-axis moments. The
+expressions in `CODEBOOK.md` §3 turn those into sub-code phase, dither ratio,
+added power and quantiser gain without downloading any records.
 
 ## 3. What is measured
 
