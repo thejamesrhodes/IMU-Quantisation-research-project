@@ -1,31 +1,3 @@
-<<<<<<< HEAD
-# Sheppard — a MEMS rate-gyroscope quantisation testbed
-
-Hardware, firmware and host-side analysis for characterising quantisation in
-MEMS gyroscopes that output a rate register rather than angle increments.
-
-The instrument captures a gyroscope's standard 16-bit rate register alongside
-its extended high-resolution FIFO channel over the same physical samples, so
-the two streams are digitisations of one shared input and the finer channel can
-serve as a reference for the coarser one. Records are written to SD in a
-self-describing binary format and reduced by the Python tools in
-`GMWM Software/tools/`.
-
-The board is named after W. F. Sheppard, whose 1898 paper gave the $-c^2/12$
-correction for the variance of grouped data
-([DOI](https://doi.org/10.1112/plms/s1-29.1.353)).
-
-## Data
-
-The measurement records are not in this repository. They are archived as a
-citable dataset:
-
-> *Static-bench gyroscope records for rate-register quantisation analysis.*
-> Zenodo. DOI: **(pending)**
-
-`zenodo/` holds the build script and templates that assemble that deposit from
-a local record directory. See `zenodo/RELEASE.md`.
-=======
 # Sheppard MEMS Rate-Register Quantisation Research Project
 
 Custom STM32F723 hardware, firmware and analysis for measuring output-register
@@ -76,7 +48,7 @@ correction for the variance of grouped data
 ([DOI](https://doi.org/10.1112/plms/s1-29.1.353)) — the same $\Delta^2/12$ the
 whole experiment turns on. The correction reappears in an unexpected place: the
 20-bit reference stream is itself a quantiser, and Sheppard's correction must be
-applied to it before it can serve as a reference at all (TN-23).
+applied to it before it can serve as a reference at all.
 
 ---
 
@@ -117,11 +89,10 @@ applied to it before it can serve as a reference at all (TN-23).
 | Primary curve $\eta(\rho)$ | ✅ Measured over a decade of $\rho$ |
 | Experimental results vs exact theory | ✅ 0.4 % of range, no free parameters, both specimens |
 | Relevance evidence (toolchain guidance, default ODR/FSR) | 🚧 In progress |
-| Manuscript | 🚧 Skeleton in `paper/` |
+| Manuscript | 🚧 Skeleton, not in this repository |
 | Preprint | ⏳ Not yet released |
 
 ---
->>>>>>> 2bfe7d583fb89b87be61e9b9810fea13f65951ca
 
 ## Hardware
 
@@ -133,43 +104,26 @@ applied to it before it can serve as a reference at all (TN-23).
 | Host link | USB-C on OTG_HS, internal HS PHY                            |
 | Power     | 4S NiMH or USB-C                                            |
 
-<<<<<<< HEAD
-The 32 MHz system clock is an experimental control, not a performance choice.
-Digital switching noise acts as dither on the quantity under study, so clock
-rates are held fixed across a campaign or logged as a treatment variable.
-=======
 The 32 MHz clock is a science parameter, not a performance choice. Digital
 switching noise adds in quadrature at the register input and therefore *dithers*
 the quantiser: more of it raises $\rho$ and abolishes the effect being measured.
 It stays fixed across a campaign, or is logged as a treatment variable. For the
 same reason the supply is recorded per record — battery is the worst case for
 the 119 Hz contaminant line; a charger with the host powered off is quietest.
->>>>>>> 2bfe7d583fb89b87be61e9b9810fea13f65951ca
 
 ---
 
 ## Repository structure
 
 ```
-<<<<<<< HEAD
-GMWM Software/                 STM32CubeIDE firmware project
-  Core/                          application sources
-  tools/                         host-side Python (console, analysis, figures)
-Array Electronics ICM42688P/   KiCad 10 project
-zenodo/                        dataset deposit build system
-=======
 GMWM Software/                 STM32CubeIDE firmware project + host Python
   Core/                          application sources
   tools/                         console, analysis, figures
 GMWM Electronics/              KiCad 10 — data-logger PCB
 Array Electronics ICM42688P/   KiCad 10 — ICM-42688-P board
 Array Software ICM42688P/      firmware for the ICM-42688-P board
-paper/                         LaTeX manuscript (skeleton)
-Figures/                       generated — do not edit by hand
 Test Datasets/                 records (gitignored; archived to Zenodo)
-Misc/                          supporting material
-TN-*.md                        technical notes
->>>>>>> 2bfe7d583fb89b87be61e9b9810fea13f65951ca
+zenodo/                        dataset deposit build system
 ```
 
 ---
@@ -181,42 +135,22 @@ pip install pyserial numpy matplotlib
 python "GMWM Software/tools/sheppard_console.py"
 ```
 
-<<<<<<< HEAD
-The console is a GUI with five tabs: a terminal, an SD card browser, a campaign
-plan editor, an analysis runner, and a figure viewer. It finds the board by USB
-ID rather than COM port and reconnects on its own when the board resets.
-=======
 The console is a GUI with five tabs: a terminal, the SD-card browser, the
 campaign-plan editor, an analysis runner, and a figure viewer that renders the
 plots in-app. It finds the board by USB ID rather than COM port and reconnects
 on its own when the board resets.
->>>>>>> 2bfe7d583fb89b87be61e9b9810fea13f65951ca
 
 Everything it does is also available from the command line, and the panel prints
 the exact command before it runs it, so a result in the GUI and a result in a
 terminal are the same result.
 
 ```
-python analyse.py summary <record-dir> -o summary.csv --fast
-python figures.py summary.csv -o <figure-dir>
-python sdat.py verify <record-dir>/*.sdat
+python analyse.py summary "../../Test Datasets" -o "../../Test Datasets/summary.csv" --fast
+python figures.py "../../Test Datasets/summary.csv" -o "../../Figures"
+python offset_fit.py "../../Test Datasets" --glob "*ph_k*.sdat"
 ```
 
-<<<<<<< HEAD
-## Record format
-
-Each `.sdat` file opens with a 4 KiB UTF-8 JSON header carrying the firmware
-version and build tag, board UID, clock tree, sensor part and slot, the full
-sensor configuration and a verbatim readback of the configuration registers.
-The payload is fixed 4 KiB blocks, each a 32-byte header plus the vendor's
-20-byte FIFO packets, with CRC-32 over every payload.
-
-`sdat.py` reads and verifies the format and depends only on the standard library
-and numpy. It is documented in the dataset deposit, which ships a standalone
-copy so the records can be read without this repository.
-=======
 ---
->>>>>>> 2bfe7d583fb89b87be61e9b9810fea13f65951ca
 
 ## Flashing without an ST-LINK
 
@@ -232,37 +166,6 @@ SWD recovery is always there:
 STM32_Programmer_CLI -c port=SWD mode=UR -e all -w "Debug/GMWM STM32.elf" -v -rst
 ```
 
-<<<<<<< HEAD
-## Conventions
-
-SI units throughout. The gyroscope's high-resolution FIFO field is 20 bits
-wide, of which 19 are significant for the gyroscope at ±2000 °/s full scale —
-the field's least significant bit is always zero. All resolutions in this
-repository and in the dataset are quoted on the 19-bit convention, so the
-reference lattice step is $\Delta' = \Delta/8$ and the register word is
-`gyro19 >> 3`.
-
-## Licence
-
-MIT — see `LICENSE`. The dataset is licensed separately under CC-BY-4.0.
-=======
----
-
-## Technical notes
-
-Start with **TN-16** if you are bringing up hardware — its bus↔chip-select
-table and failure-mode list are most of the time it took to get the board alive.
-**TN-20** is the campaign handover. **TN-21** through **TN-25** are the results:
-the `OFFSET_USER` step size and the vernier phase ladder; the R2 estimator error
-and the thermal environment; the phase sweep with the reference-truncation
-correction; the third place that correction belonged; and the recovery,
-derivation and measurement of the Bussgang gain $G(\rho)$.
-
-> **Read TN-24 before quoting a number from any earlier note.** It found that
-> the reference correction had been applied to only two of the three places it
-> belongs, which left every $\eta$ in the campaign low by exactly $1/64$. Those
-> earlier values are superseded.
-
 ---
 
 ## Status
@@ -274,7 +177,8 @@ free parameters — on both specimens independently**. Repeatability is measured
 at $\sigma_\eta = 0.0065$, so the theory is good to about twice the noise floor
 of the apparatus.
 
-The manuscript is a skeleton in `paper/`. The bench work the preprint needs is
+The manuscript is a skeleton and is not held in this repository. The bench
+work the preprint needs is
 done; what remains is desk work — the relevance evidence, the software-dither
 sweep, and the writing.
 
@@ -282,11 +186,21 @@ sweep, and the writing.
 
 ## Preprint and data
 
-The preprint is **not yet released**. A manuscript is in preparation in `paper/`
-and is intended for submission to a measurement-science journal (IOP
+The preprint is **not yet released**. A manuscript is in preparation and is
+intended for submission to a measurement-science journal (IOP
 *Measurement Science and Technology*); this section will carry the preprint DOI
-when it is public. Campaign data is archived to Zenodo under its own DOI and is
-not held in this repository.
+when it is public.
+
+Campaign data is archived to Zenodo under its own DOI and is not held in this
+repository:
+
+> Rhodes, J. (2026). *Static-bench gyroscope records for rate-register
+> quantisation analysis: paired 16-bit register and 19-bit FIFO streams from
+> two ICM-42688-P specimens* (Version 1.0.0) [Data set]. Zenodo.
+> <https://doi.org/10.5281/zenodo.22860516>
+
+`zenodo/` holds the build script and templates that assemble that deposit from
+a local record directory; see `zenodo/RELEASE.md`.
 
 ---
 
@@ -294,4 +208,15 @@ not held in this repository.
 
 SI units. LaTeX for maths. Campaign data goes to Zenodo with a DOI, not into
 this repository.
->>>>>>> 2bfe7d583fb89b87be61e9b9810fea13f65951ca
+
+The gyroscope's high-resolution FIFO field is 20 bits wide, of which 19 are
+significant at ±2000 °/s full scale — the field's least significant bit is
+always zero. All resolutions in this repository and in the dataset are quoted
+on the 19-bit convention, so the reference lattice step is $\Delta' = \Delta/8$
+and the register word is `gyro19 >> 3`.
+
+---
+
+## Licence
+
+MIT — see `LICENSE`. The dataset is licensed separately under CC-BY-4.0.
