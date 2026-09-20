@@ -1,7 +1,7 @@
 # Sheppard MEMS Rate-Register Quantisation Research Project
 
 Custom STM32F723 hardware, firmware and analysis for measuring output-register
-quantisation noise in MEMS **rate** gyroscopes. Specifically gyroscopes that report an
+quantisation noise in MEMS rate gyroscopes. Specifically gyroscopes that report an
 angular-rate register rather than an integrated angle increment.
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22860515.svg)](https://doi.org/10.5281/zenodo.22860515)
@@ -11,9 +11,9 @@ angular-rate register rather than an integrated angle increment.
 ![KiCad](https://img.shields.io/badge/KiCad-10-blue)
 ![Analysis](https://img.shields.io/badge/analysis-Python_%2B_R-blue)
 
-*This is a pre-publication research project. The preprint is **not yet released**;
+*This is a pre-publication research project. The preprint is not yet released.
 the results, figures and numbers in this repository are working values and are subject to change. 
-Nothing here has been peer-reviewed.*
+Nothing here has been peer-reviewed. Preliminary Datasets are available on Zenodo*
 
 ---
 
@@ -22,16 +22,16 @@ Nothing here has been peer-reviewed.*
 Rate-register quantisation is predicted to appear at a $-1/2$ Allan-deviation
 slope and to be absorbed silently into the fitted angle random walk (ARW),
 rather than appearing as the $-1$-slope angle-quantisation ("Q") term of IEEE
-Std 952 — which describes a *different* output architecture, the angle-increment
+Std 952, which describes a different output architecture for angle-increment
 parts (FOGs, RLGs). This holds regardless of the error's statistics: whether the
-quantisation error is PQN-white, deadbanded, or dithered, it enters the *rate*
-and therefore hides inside the fitted ARW instead of appearing as a separable Q.
+quantisation error is PQN-white, deadbanded, or dithered, it enters the rate
+and therefore appears inside the fitted ARW instead of appearing as a separable Q.
 
 If that is correct, fitted stochastic-noise parameters depend on the
-configuration — output data rate (ODR), full-scale range (FSR), output word
-length — at which they were measured, and the $\sqrt{\text{ODR}}$
+configuration (output data rate (ODR), full-scale range (FSR), output word
+length) at which they were measured, and the $\sqrt{\text{ODR}}$
 bandwidth-transfer rule embedded in every mainstream IMU calibration toolchain,
-where it is stated as a *condition* requiring ideal decimation rather than a
+where it is stated as a condition requiring ideal decimation rather than a
 validated result, has never been checked for modern high-ODR consumer parts.
 
 **Why this has gone unnoticed.** The transfer rule was safe for the parts it was
@@ -39,10 +39,6 @@ developed on. An MPU-6050-class gyro (≈5 mdps/√Hz, 2011) at ±2000 dps / 100
 sits at a dither ratio $\rho = \sigma/\Delta \approx 0.58$, where the
 pseudo-quantisation-noise (PQN) model is valid to ~2 %. The ICM-42688-P
 (≈2.8 mdps/√Hz, 2020) sits at $\rho \approx 0.32$, where it is not.
-
-> **The assumption did not fail because it was wrong when written. It failed
-> because consumer MEMS gyros became quieter than ~4.3 mdps/√Hz, and nothing
-> announced the crossing.**
 
 The board is named after W. F. Sheppard, whose 1898 paper gave the $-c^2/12$
 correction for the variance of grouped data
@@ -60,11 +56,10 @@ applied to it before it can serve as a reference at all.
   that does.
 - Establish that rate-register quantisation presents at the $-1/2$ slope and is
   absorbed into the fitted ARW, distinct from the IEEE-952 angle-quantisation
-  term. *(This is the most robust claim in the project and is independent of the
-  PQN-validity question.)*
+  term.
 - Derive the exact, parameter-free output-quantisation behaviour, governed by
-  two quantities — the dither ratio $\rho = \sigma/\Delta$ and the sub-LSB bias
-  phase $\mu \bmod \Delta$ — both measurable from a static code histogram with
+  two quantities: the dither ratio $\rho = \sigma/\Delta$ and the sub-LSB bias
+  phase $\mu \bmod \Delta$. Both measurable from a static code histogram with
   no additional hardware.
 - Identify which requantisation architecture the output register implements
   (undithered/PQN, truncation, RPDF- or TPDF-dithered) from output data alone,
@@ -73,7 +68,7 @@ applied to it before it can serve as a reference at all.
   output-register quantisation or exposes $\rho$ or $\mu$, and document the
   effect size against configuration so a practitioner can locate their own.
 - Publish the hardware, firmware, analysis code and a raw-integer-code,
-  temperature-logged dataset — a dataset that, on the searches conducted, does
+  temperature-logged dataset. A dataset that, on the searches conducted, does
   not currently exist, because public IMU datasets are distributed as calibrated
   floats and the calibration destroys the code lattice.
 
@@ -104,13 +99,6 @@ applied to it before it can serve as a reference at all.
 | Storage   | microSD on SDMMC2, exFAT                                    |
 | Host link | USB-C on OTG_HS, internal HS PHY                            |
 | Power     | 4S NiMH or USB-C                                            |
-
-The 32 MHz clock is a science parameter, not a performance choice. Digital
-switching noise adds in quadrature at the register input and therefore *dithers*
-the quantiser: more of it raises $\rho$ and abolishes the effect being measured.
-It stays fixed across a campaign, or is logged as a treatment variable. For the
-same reason the supply is recorded per record — battery is the worst case for
-the 119 Hz contaminant line; a charger with the host powered off is quietest.
 
 ---
 
@@ -187,7 +175,7 @@ sweep, and the writing.
 
 ## Preprint and data
 
-The preprint is **not yet released**. A manuscript is in preparation and is
+The preprint is not yet released. A manuscript is in preparation and is
 intended for submission to a measurement-science journal (IOP
 *Measurement Science and Technology*); this section will carry the preprint DOI
 when it is public.
