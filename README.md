@@ -100,6 +100,8 @@ applied to it before it can serve as a reference at all.
 | Host link | USB-C on OTG_HS, internal HS PHY                            |
 | Power     | 4S NiMH or USB-C                                            |
 
+![IMG_20260730_110945.jpg](IMG_20260730_110945.jpg)
+
 ---
 
 ## Repository structure
