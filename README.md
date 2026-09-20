@@ -4,6 +4,7 @@ Custom STM32F723 hardware, firmware and analysis for measuring output-register
 quantisation noise in MEMS **rate** gyroscopes. Specifically gyroscopes that report an
 angular-rate register rather than an integrated angle increment.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22860515.svg)](https://doi.org/10.5281/zenodo.22860515)
 ![Status](https://img.shields.io/badge/status-pre--publication-orange)
 ![Preprint](https://img.shields.io/badge/preprint-not_yet_released-lightgrey)
 ![MCU](https://img.shields.io/badge/MCU-STM32F723-blue)
@@ -191,16 +192,23 @@ intended for submission to a measurement-science journal (IOP
 *Measurement Science and Technology*); this section will carry the preprint DOI
 when it is public.
 
-Campaign data is archived to Zenodo under its own DOI and is not held in this
-repository:
+Campaign data is archived to Zenodo and is not held in this repository:
 
 > Rhodes, J. (2026). *Paired 16-bit and 19-bit output records from two
 > ICM-42688-P MEMS gyroscopes across output-rate and sub-LSB bias-offset
-> sweeps* (Version 1.0.0) [Data set]. Zenodo.
-> <https://doi.org/10.5281/zenodo.22860516>
+> sweeps* [Data set]. Zenodo. <https://doi.org/10.5281/zenodo.22860515>
 
-`zenodo/` holds the build script and templates that assemble that deposit from
-a local record directory; see `zenodo/RELEASE.md`.
+That is the concept DOI and always resolves to the newest version. Version
+1.0.0 specifically is <https://doi.org/10.5281/zenodo.22860516>: 94 records,
+10,599,722 samples, 9.43 hours, two specimens, seven output rates.
+
+The deposit is self-contained. It ships a standalone reader, a codebook
+defining every column of `summary.csv` with closed-form expressions for the
+derived quantities, and a SHA-256 manifest covering both the uploaded files and
+each record inside each bundle.
+
+`zenodo/` holds the build script and templates that assemble the deposit from a
+local record directory; see `zenodo/RELEASE.md`.
 
 ---
 

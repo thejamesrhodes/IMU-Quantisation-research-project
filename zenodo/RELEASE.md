@@ -1,5 +1,9 @@
 # Release and deposit procedure
 
+Version 1.0.0 is published: <https://doi.org/10.5281/zenodo.22860515>
+(concept DOI, resolves to the newest version). What follows is the
+procedure, and applies unchanged to the next version.
+
 Two separate things, often confused:
 
 | | Where it comes from | What it needs |
@@ -140,7 +144,7 @@ codebook, licence and citation, rebuild with it:
 
 ```powershell
 python build_deposit.py --records "..\Test Datasets" --out build `
-                        --doi "10.5281/zenodo.XXXXXXX" --version 1.0.0
+                        --doi "10.5281/zenodo.22860516" --version 1.0.0
 ```
 
 `--keep-gate-rule` ships the record headers exactly as logged, including the
@@ -202,10 +206,10 @@ Get-Content MANIFEST-SHA256.txt |
    | Field | Value |
    |---|---|
    | Resource type | Dataset |
-   | Title | Static-bench gyroscope records for rate-register quantisation analysis: paired 16-bit register and 19-bit FIFO streams from two ICM-42688-P specimens |
-   | Creators | Rhodes, James — *Independent researcher* — ORCID |
-   | Description | §1 and §3 of the deposit `README.md` |
-   | Licence | Creative Commons Attribution 4.0 International |
+   | Title | Paired 16-bit and 19-bit output records from two ICM-42688-P MEMS gyroscopes across output-rate and sub-LSB bias-offset sweeps |
+   | Creators | Rhodes, James — *Independent Researcher* — ORCID 0009-0000-9893-145X |
+   | Description, copyright, references, keywords | see `ZENODO_METADATA.md`, paste-ready |
+   | Licences | Creative Commons Attribution 4.0 International **and** MIT |
    | Version | 1.0.0 |
    | Language | English |
    | Keywords | MEMS gyroscope; quantisation noise; Allan variance; angle random walk; inertial sensor calibration; ICM-42688-P; truncating quantiser; sensor characterisation |
