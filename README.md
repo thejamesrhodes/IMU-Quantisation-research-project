@@ -42,7 +42,7 @@ pseudo-quantisation-noise (PQN) model is valid to ~2 %. The ICM-42688-P
 
 The board is named after W. F. Sheppard, whose 1898 paper gave the $-c^2/12$
 correction for the variance of grouped data
-([DOI](https://doi.org/10.1112/plms/s1-29.1.353)) — the same $\Delta^2/12$ the
+([DOI](https://doi.org/10.1112/plms/s1-29.1.353)) - the same $\Delta^2/12$ the
 whole experiment turns on. The correction reappears in an unexpected place: the
 20-bit reference stream is itself a quantiser, and Sheppard's correction must be
 applied to it before it can serve as a reference at all.
@@ -187,18 +187,6 @@ Campaign data is archived to Zenodo and is not held in this repository:
 > Rhodes, J. (2026). *Paired 16-bit and 19-bit output records from two
 > ICM-42688-P MEMS gyroscopes across output-rate and sub-LSB bias-offset
 > sweeps* [Data set]. Zenodo. <https://doi.org/10.5281/zenodo.22860515>
-
-That is the concept DOI and always resolves to the newest version. Version
-1.0.0 specifically is <https://doi.org/10.5281/zenodo.22860516>: 94 records,
-10,599,722 samples, 9.43 hours, two specimens, seven output rates.
-
-The deposit is self-contained. It ships a standalone reader, a codebook
-defining every column of `summary.csv` with closed-form expressions for the
-derived quantities, and a SHA-256 manifest covering both the uploaded files and
-each record inside each bundle.
-
-`zenodo/` holds the build script and templates that assemble the deposit from a
-local record directory; see `zenodo/RELEASE.md`.
 
 ---
 
