@@ -44,7 +44,7 @@ The board is named after W. F. Sheppard, whose 1898 paper gave the $-c^2/12$
 correction for the variance of grouped data
 ([DOI](https://doi.org/10.1112/plms/s1-29.1.353)) - the same $\Delta^2/12$ the
 whole experiment turns on. The correction reappears in an unexpected place: the
-20-bit reference stream is itself a quantiser, and Sheppard's correction must be
+19-bit reference stream is itself a quantiser, and Sheppard's correction must be
 applied to it before it can serve as a reference at all.
 
 ---
